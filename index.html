@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Directional Skills Learning Game</title>
+    <meta name="description" content="Educational game for learning directional key controls designed for students with physical and learning difficulties">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Icons (Using Unicode symbols for no external dependencies) -->
+    <style>
+        .icon::before {
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+        }
+        .icon-play::before { content: "▶️"; }
+        .icon-pause::before { content: "⏸️"; }
+        .icon-settings::before { content: "⚙️"; }
+        .icon-help::before { content: "❓"; }
+        .icon-fullscreen::before { content: "⛶"; }
+        .icon-stats::before { content: "📊"; }
+        .icon-sound::before { content: "🔊"; }
+        .icon-mute::before { content: "🔇"; }
+        .icon-practice::before { content: "🎯"; }
+    </style>
+</head>
+<body>
+    <!-- Skip Link for Screen Readers -->
+    <a href="#game-canvas" class="skip-link">Skip to game</a>
+    
+    <!-- Top Menu Bar -->
+    <header class="top-menu" role="banner">
+        <div class="menu-container">
+            <!-- Game Title -->
+            <h1 class="game-title">Directional Skills Game</h1>
+            
+            <!-- Menu Icons -->
+            <nav class="menu-icons" role="navigation" aria-label="Game controls">
+                <button class="menu-btn icon icon-play" id="play-pause-btn" 
+                        aria-label="Play/Pause game" title="Play/Pause (Space)">
+                </button>
+                
+                <button class="menu-btn icon icon-practice" id="practice-btn" 
+                        aria-label="Open practice mode" title="Practice Mode">
+                </button>
+                
+                <button class="menu-btn icon icon-settings" id="settings-btn" 
+                        aria-label="Open settings" title="Settings">
+                </button>
+                
+                <button class="menu-btn icon icon-stats" id="stats-btn" 
+                        aria-label="View statistics" title="View Stats">
+                </button>
+                
+                <button class="menu-btn icon icon-help" id="help-btn" 
+                        aria-label="View help" title="Help (F1)">
+                </button>
+                
+                <button class="menu-btn icon icon-sound" id="sound-btn" 
+                        aria-label="Toggle sound" title="Toggle Sound">
+                </button>
+                
+                <button class="menu-btn icon icon-fullscreen" id="fullscreen-btn" 
+                        aria-label="Toggle fullscreen" title="Fullscreen (F11)">
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Game Area -->
+    <main class="game-container" role="main">
+        <!-- Game Canvas -->
+        <canvas id="game-canvas" 
+                role="application"
+                aria-label="Directional Skills Practice Game"
+                tabindex="0">
+            <p>This game requires a modern browser with HTML5 Canvas support.</p>
+        </canvas>
+        
+        <!-- Game Metrics Overlay (Non-Distracting) -->
+        <div class="metrics-overlay" aria-live="polite">
+            <div class="metric-item" id="level-display">
+                <span class="metric-label">Level:</span>
+                <span class="metric-value" id="current-level">1</span>
+            </div>
+            
+            <div class="metric-item" id="score-display">
+                <span class="metric-label">Score:</span>
+                <span class="metric-value" id="current-score">0</span>
+            </div>
+            
+            <div class="metric-item" id="targets-display">
+                <span class="metric-label">Targets:</span>
+                <span class="metric-value" id="targets-collected">0</span>
+                <span class="metric-separator">/</span>
+                <span class="metric-value" id="targets-total">5</span>
+            </div>
+        </div>
+        
+        <!-- Progress Bar Overlay -->
+        <div class="progress-overlay">
+            <div class="progress-container">
+                <div class="progress-bar" role="progressbar" 
+                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+                     aria-label="Level progress">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Settings Modal -->
+    <dialog class="modal" id="settings-modal" aria-labelledby="settings-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="settings-title">Game Settings</h2>
+                <button class="modal-close" aria-label="Close settings">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form class="settings-form">
+                    <fieldset>
+                        <legend>Movement Settings</legend>
+                        <label for="movement-speed">Movement Speed:</label>
+                        <input type="range" id="movement-speed" min="1" max="5" value="3">
+                        
+                        <label>
+                            <input type="checkbox" id="input-buffering" checked> 
+                            Input Buffering (Makes controls more forgiving)
+                        </label>
+                    </fieldset>
+                    
+                    <fieldset>
+                        <legend>Accessibility</legend>
+                        <label>
+                            <input type="checkbox" id="audio-enabled" checked> 
+                            Enable Audio Feedback
+                        </label>
+                        
+                        <label>
+                            <input type="checkbox" id="reduced-motion"> 
+                            Reduce Motion Effects
+                        </label>
+                        
+                        <label for="resize-handling">Window Resize Behavior:</label>
+                        <select id="resize-handling">
+                            <option value="reposition">Keep targets visible (move if needed)</option>
+                            <option value="scale">Scale targets proportionally</option>
+                            <option value="regenerate">Generate new target positions</option>
+                            <option value="pause">Pause game during resize</option>
+                        </select>
+                    </fieldset>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="save-settings">Save Settings</button>
+                <button class="btn btn-secondary" id="cancel-settings">Cancel</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Practice Mode Modal -->
+    <dialog class="modal practice-modal" id="practice-modal" aria-labelledby="practice-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="practice-title">Practice Mode Setup</h2>
+                <button class="modal-close" aria-label="Close practice mode">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form class="practice-form">
+                    <fieldset>
+                        <legend>Targets</legend>
+                        <label for="target-count">Number of Targets:</label>
+                        <input type="range" id="target-count" min="1" max="15" value="5">
+                        <span id="target-count-value" class="range-value">5</span>
+                        
+                        <label for="target-size">Target Size:</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="target-size" value="small"> Small</label>
+                            <label><input type="radio" name="target-size" value="medium" checked> Medium</label>
+                            <label><input type="radio" name="target-size" value="large"> Large</label>
+                            <label><input type="radio" name="target-size" value="extra-large"> Extra Large</label>
+                        </div>
+                        
+                        <label>Target Types:</label>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" id="target-static" checked> Static</label>
+                            <label><input type="checkbox" id="target-moving"> Slow Moving</label>
+                            <label><input type="checkbox" id="target-flee"> Move Away When Approached</label>
+                            <label><input type="checkbox" id="target-bonus"> Bonus Targets</label>
+                        </div>
+                    </fieldset>
+                    
+                    <fieldset>
+                        <legend>Player Movement</legend>
+                        <label for="player-speed">Movement Speed:</label>
+                        <input type="range" id="player-speed" min="1" max="5" value="3">
+                        <span id="player-speed-value" class="range-value">Normal</span>
+                        
+                        <label for="player-trail">Movement Trail:</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="player-trail" value="off"> Off</label>
+                            <label><input type="radio" name="player-trail" value="short" checked> Short</label>
+                            <label><input type="radio" name="player-trail" value="long"> Long</label>
+                        </div>
+                    </fieldset>
+                    
+                    <fieldset>
+                        <legend>Input Methods</legend>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" id="input-keyboard" checked> Keyboard (Arrow Keys + WASD)</label>
+                            <label><input type="checkbox" id="input-mouse-click"> Mouse Click-to-Move</label>
+                            <label><input type="checkbox" id="input-mouse-drag"> Mouse Drag-to-Move</label>
+                        </div>
+                        
+                        <label for="input-buffer">Input Buffer Time:</label>
+                        <input type="range" id="input-buffer" min="0" max="1000" value="300" step="50">
+                        <span id="input-buffer-value" class="range-value">300ms</span>
+                    </fieldset>
+                    
+                    <fieldset>
+                        <legend>Game Environment</legend>
+                        <label for="game-boundaries">Boundaries:</label>
+                        <div class="radio-group">
+                            <label><input type="radio" name="game-boundaries" value="none" checked> None</label>
+                            <label><input type="radio" name="game-boundaries" value="visual"> Visual Guidelines</label>
+                            <label><input type="radio" name="game-boundaries" value="hard"> Hard Walls</label>
+                        </div>
+                        
+                        <label>Feedback Options:</label>
+                        <div class="checkbox-group">
+                            <label><input type="checkbox" id="feedback-audio" checked> Audio Feedback</label>
+                            <label><input type="checkbox" id="feedback-visual" checked> Visual Effects</label>
+                            <label><input type="checkbox" id="feedback-haptic"> Haptic Feedback</label>
+                        </div>
+                    </fieldset>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <div class="preset-controls">
+                    <select id="practice-presets">
+                        <option value="">Choose a preset...</option>
+                        <option value="first-steps">First Steps (Beginner)</option>
+                        <option value="building-confidence">Building Confidence</option>
+                        <option value="precision-practice">Precision Practice</option>
+                        <option value="dynamic-challenge">Dynamic Challenge</option>
+                    </select>
+                    <button class="btn btn-secondary" id="save-preset">Save as Preset</button>
+                </div>
+                <div class="action-controls">
+                    <button class="btn btn-primary" id="start-practice">Start Practice</button>
+                    <button class="btn btn-secondary" id="cancel-practice">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Help Modal -->
+    <dialog class="modal" id="help-modal" aria-labelledby="help-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="help-title">How to Play</h2>
+                <button class="modal-close" aria-label="Close help">&times;</button>
+            </div>
+            <div class="modal-body">
+                <section>
+                    <h3>Game Objective</h3>
+                    <p>Use the directional keys to move your character and collect all the targets to complete each level.</p>
+                </section>
+                
+                <section>
+                    <h3>Controls</h3>
+                    <ul>
+                        <li><strong>Movement:</strong> Arrow Keys or WASD keys</li>
+                        <li><strong>Pause:</strong> Space bar or ESC key</li>
+                        <li><strong>Fullscreen:</strong> F11 key</li>
+                        <li><strong>Help:</strong> F1 key</li>
+                    </ul>
+                </section>
+                
+                <section>
+                    <h3>Tips</h3>
+                    <ul>
+                        <li>Take your time - there's no time pressure</li>
+                        <li>Use the settings to adjust movement speed</li>
+                        <li>Enable input buffering if controls feel too sensitive</li>
+                        <li>You can't lose - focus on learning and improving</li>
+                    </ul>
+                </section>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="close-help">Got it!</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Statistics Modal -->
+    <dialog class="modal" id="stats-modal" aria-labelledby="stats-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="stats-title">Your Progress</h2>
+                <button class="modal-close" aria-label="Close statistics">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Current Level</h3>
+                        <div class="stat-value" id="stats-level">1</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Total Score</h3>
+                        <div class="stat-value" id="stats-score">0</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Targets Collected</h3>
+                        <div class="stat-value" id="stats-targets">0</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Time Played</h3>
+                        <div class="stat-value" id="stats-time">0:00</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="close-stats">Close</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- ARIA Live Regions for Screen Readers -->
+    <div aria-live="polite" id="game-status" class="sr-only"></div>
+    <div aria-live="assertive" id="game-alerts" class="sr-only"></div>
+
+    <!-- Game Script -->
+    <script src="game.js"></script>
+</body>
+</html>
