@@ -42,8 +42,8 @@
                         aria-label="Play/Pause game" title="Play/Pause (Space)">
                 </button>
                 
-                <button class="menu-btn icon icon-practice" id="practice-btn" 
-                        aria-label="Open practice mode" title="Practice Mode">
+                <button class="menu-btn icon icon-practice" id="session-btn" 
+                        aria-label="Start new session" title="Start Session">
                 </button>
                 
                 <button class="menu-btn icon icon-settings" id="settings-btn" 
@@ -81,21 +81,9 @@
         
         <!-- Game Metrics Overlay (Non-Distracting) -->
         <div class="metrics-overlay" aria-live="polite">
-            <div class="metric-item" id="level-display">
-                <span class="metric-label">Level:</span>
-                <span class="metric-value" id="current-level">1</span>
-            </div>
-            
-            <div class="metric-item" id="score-display">
-                <span class="metric-label">Score:</span>
-                <span class="metric-value" id="current-score">0</span>
-            </div>
-            
-            <div class="metric-item" id="targets-display">
-                <span class="metric-label">Targets:</span>
-                <span class="metric-value" id="targets-collected">0</span>
-                <span class="metric-separator">/</span>
-                <span class="metric-value" id="targets-total">5</span>
+            <div class="metric-item" id="session-display">
+                <span class="metric-label">Time:</span>
+                <span class="metric-value" id="current-session-time">00:00</span>
             </div>
         </div>
         
@@ -104,7 +92,7 @@
             <div class="progress-container">
                 <div class="progress-bar" role="progressbar" 
                      aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
-                     aria-label="Level progress">
+                     aria-label="Session progress">
                     <div class="progress-fill" id="progress-fill"></div>
                 </div>
             </div>
@@ -160,79 +148,113 @@
         </div>
     </dialog>
 
-    <!-- Practice Mode Modal -->
-    <dialog class="modal practice-modal" id="practice-modal" aria-labelledby="practice-title">
+    <!-- Session Setup Modal -->
+    <dialog class="modal practice-modal" id="session-modal" aria-labelledby="session-title">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="practice-title">Practice Mode Setup</h2>
-                <button class="modal-close" aria-label="Close practice mode">&times;</button>
+                <h2 id="session-title">Session Setup</h2>
+                <button class="modal-close" aria-label="Close session setup">&times;</button>
             </div>
             <div class="modal-body">
-                <form class="practice-form">
+                <form class="session-form">
                     <fieldset>
-                        <legend>Targets</legend>
-                        <label for="target-count">Number of Targets:</label>
-                        <input type="range" id="target-count" min="1" max="15" value="5">
-                        <span id="target-count-value" class="range-value">5</span>
+                        <legend>Session Configuration</legend>
                         
-                        <label for="target-size">Target Size:</label>
-                        <div class="radio-group">
-                            <label><input type="radio" name="target-size" value="small"> Small</label>
-                            <label><input type="radio" name="target-size" value="medium" checked> Medium</label>
-                            <label><input type="radio" name="target-size" value="large"> Large</label>
-                            <label><input type="radio" name="target-size" value="extra-large"> Extra Large</label>
+                        <div class="form-group">
+                            <label for="session-seed">Replay Code (to repeat the same session):</label>
+                            <input type="text" id="session-seed" placeholder="e.g., morning-practice, blue-circles, 123">
+                            <small class="field-help">Use words, phrases, or numbers to create sessions you can repeat exactly</small>
                         </div>
                         
-                        <label>Target Types:</label>
-                        <div class="checkbox-group">
-                            <label><input type="checkbox" id="target-static" checked> Static</label>
-                            <label><input type="checkbox" id="target-moving"> Slow Moving</label>
-                            <label><input type="checkbox" id="target-flee"> Move Away When Approached</label>
-                            <label><input type="checkbox" id="target-bonus"> Bonus Targets</label>
+                        <div class="form-group">
+                            <label for="target-count">Number of Targets:</label>
+                            <div class="input-with-value">
+                                <input type="range" id="target-count" min="1" max="15" value="5">
+                                <span id="target-count-value" class="range-value">5</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Target Size:</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="target-size" value="small"> Small</label>
+                                <label><input type="radio" name="target-size" value="medium" checked> Medium</label>
+                                <label><input type="radio" name="target-size" value="large"> Large</label>
+                                <label><input type="radio" name="target-size" value="extra-large"> Extra Large</label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Target Types:</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" id="target-static" checked> Static</label>
+                                <label><input type="checkbox" id="target-moving"> Slow Moving</label>
+                                <label><input type="checkbox" id="target-flee"> Move Away When Approached</label>
+                                <label><input type="checkbox" id="target-bonus"> Bonus Targets</label>
+                            </div>
                         </div>
                     </fieldset>
                     
                     <fieldset>
                         <legend>Player Movement</legend>
-                        <label for="player-speed">Movement Speed:</label>
-                        <input type="range" id="player-speed" min="1" max="5" value="3">
-                        <span id="player-speed-value" class="range-value">Normal</span>
                         
-                        <label for="player-trail">Movement Trail:</label>
-                        <div class="radio-group">
-                            <label><input type="radio" name="player-trail" value="off"> Off</label>
-                            <label><input type="radio" name="player-trail" value="short" checked> Short</label>
-                            <label><input type="radio" name="player-trail" value="long"> Long</label>
+                        <div class="form-group">
+                            <label for="player-speed">Movement Speed:</label>
+                            <div class="input-with-value">
+                                <input type="range" id="player-speed" min="1" max="5" value="3">
+                                <span id="player-speed-value" class="range-value">Normal</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Movement Trail:</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="player-trail" value="off"> Off</label>
+                                <label><input type="radio" name="player-trail" value="short" checked> Short</label>
+                                <label><input type="radio" name="player-trail" value="long"> Long</label>
+                            </div>
                         </div>
                     </fieldset>
                     
                     <fieldset>
                         <legend>Input Methods</legend>
-                        <div class="checkbox-group">
-                            <label><input type="checkbox" id="input-keyboard" checked> Keyboard (Arrow Keys + WASD)</label>
-                            <label><input type="checkbox" id="input-mouse-click"> Mouse Click-to-Move</label>
-                            <label><input type="checkbox" id="input-mouse-drag"> Mouse Drag-to-Move</label>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" id="input-keyboard" checked> Keyboard (Arrow Keys + WASD)</label>
+                                <label><input type="checkbox" id="input-mouse-click"> Mouse Click-to-Move</label>
+                                <label><input type="checkbox" id="input-mouse-drag"> Mouse Drag-to-Move</label>
+                            </div>
                         </div>
                         
-                        <label for="input-buffer">Input Buffer Time:</label>
-                        <input type="range" id="input-buffer" min="0" max="1000" value="300" step="50">
-                        <span id="input-buffer-value" class="range-value">300ms</span>
+                        <div class="form-group">
+                            <label for="input-buffer">Input Buffer Time:</label>
+                            <div class="input-with-value">
+                                <input type="range" id="input-buffer" min="0" max="1000" value="300" step="50">
+                                <span id="input-buffer-value" class="range-value">300ms</span>
+                            </div>
+                        </div>
                     </fieldset>
                     
                     <fieldset>
                         <legend>Game Environment</legend>
-                        <label for="game-boundaries">Boundaries:</label>
-                        <div class="radio-group">
-                            <label><input type="radio" name="game-boundaries" value="none" checked> None</label>
-                            <label><input type="radio" name="game-boundaries" value="visual"> Visual Guidelines</label>
-                            <label><input type="radio" name="game-boundaries" value="hard"> Hard Walls</label>
+                        
+                        <div class="form-group">
+                            <label>Boundaries:</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="game-boundaries" value="none" checked> None</label>
+                                <label><input type="radio" name="game-boundaries" value="visual"> Visual Guidelines</label>
+                                <label><input type="radio" name="game-boundaries" value="hard"> Hard Walls</label>
+                            </div>
                         </div>
                         
-                        <label>Feedback Options:</label>
-                        <div class="checkbox-group">
-                            <label><input type="checkbox" id="feedback-audio" checked> Audio Feedback</label>
-                            <label><input type="checkbox" id="feedback-visual" checked> Visual Effects</label>
-                            <label><input type="checkbox" id="feedback-haptic"> Haptic Feedback</label>
+                        <div class="form-group">
+                            <label>Feedback Options:</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" id="feedback-audio" checked> Audio Feedback</label>
+                                <label><input type="checkbox" id="feedback-visual" checked> Visual Effects</label>
+                                <label><input type="checkbox" id="feedback-haptic"> Haptic Feedback</label>
+                            </div>
                         </div>
                     </fieldset>
                 </form>
@@ -249,8 +271,8 @@
                     <button class="btn btn-secondary" id="save-preset">Save as Preset</button>
                 </div>
                 <div class="action-controls">
-                    <button class="btn btn-primary" id="start-practice">Start Practice</button>
-                    <button class="btn btn-secondary" id="cancel-practice">Cancel</button>
+                    <button class="btn btn-primary" id="start-session">Start Session</button>
+                    <button class="btn btn-secondary" id="cancel-session">Cancel</button>
                 </div>
             </div>
         </div>
@@ -266,7 +288,7 @@
             <div class="modal-body">
                 <section>
                     <h3>Game Objective</h3>
-                    <p>Use the directional keys to move your character and collect all the targets to complete each level.</p>
+                    <p>Use the directional keys to move your character and collect all the targets in your configured session.</p>
                 </section>
                 
                 <section>
@@ -295,6 +317,49 @@
         </div>
     </dialog>
 
+    <!-- Session Results Modal -->
+    <dialog class="modal" id="results-modal" aria-labelledby="results-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="results-title">Game Complete!</h2>
+                <button class="modal-close" aria-label="Close game results">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Game Time</h3>
+                        <div class="stat-value" id="results-time">0:00</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Targets Collected</h3>
+                        <div class="stat-value" id="results-targets">0</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Replay Code</h3>
+                        <div class="stat-value" id="results-seed">-</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Completion</h3>
+                        <div class="stat-value" id="results-completion">100%</div>
+                    </div>
+                </div>
+                
+                <div class="session-history">
+                    <h3>Recent Games</h3>
+                    <div id="session-history-list" class="history-list"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="replay-game">Replay Game</button>
+                <button class="btn btn-secondary" id="new-session">New Game</button>
+                <button class="btn btn-tertiary" id="close-results">Close</button>
+            </div>
+        </div>
+    </dialog>
+
     <!-- Statistics Modal -->
     <dialog class="modal" id="stats-modal" aria-labelledby="stats-title">
         <div class="modal-content">
@@ -305,23 +370,23 @@
             <div class="modal-body">
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <h3>Current Level</h3>
-                        <div class="stat-value" id="stats-level">1</div>
+                        <h3>Sessions Played</h3>
+                        <div class="stat-value" id="stats-sessions">0</div>
                     </div>
                     
                     <div class="stat-card">
-                        <h3>Total Score</h3>
-                        <div class="stat-value" id="stats-score">0</div>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <h3>Targets Collected</h3>
+                        <h3>Total Targets</h3>
                         <div class="stat-value" id="stats-targets">0</div>
                     </div>
                     
                     <div class="stat-card">
-                        <h3>Time Played</h3>
+                        <h3>Total Time</h3>
                         <div class="stat-value" id="stats-time">0:00</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>Average Session</h3>
+                        <div class="stat-value" id="stats-average">0:00</div>
                     </div>
                 </div>
             </div>
@@ -338,5 +403,6 @@
     <!-- Game Script -->
     <script src="game.js"></script>
 </body>
-</html>< ! - -   T r i g g e r   P a g e s   d e p l o y m e n t   - - >  
+</html>< ! - -   T r i g g e r   P a g e s   d e p l o y m e n t   - - > 
+ 
  

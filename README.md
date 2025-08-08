@@ -1,15 +1,16 @@
-# Gioco - Directional Skills Game
+# Gioco - Directional Skills Therapeutic Game
 
-An accessible educational web game designed to help users develop directional navigation skills using keyboard controls. The game features progressive difficulty levels and multiple input methods to accommodate different learning preferences.
+An accessible educational web game designed specifically for therapists and students with physical and learning difficulties. The game provides customizable therapeutic sessions to develop directional navigation skills using multiple input methods.
 
 ## 🎯 Purpose
 
-This game helps users develop confidence and proficiency with directional controls (arrow keys, WASD) through engaging, progressive gameplay. Perfect for:
+This therapeutic game helps students with physical and learning difficulties develop confidence and proficiency with directional controls through customizable, reproducible sessions. Perfect for:
 
-- Learning basic keyboard navigation skills
-- Developing hand-eye coordination
-- Educational environments and skill development
-- Practice with different input methods (keyboard, mouse, touch)
+- Therapeutic environments and occupational therapy
+- Students with diverse learning and motor needs
+- Developing hand-eye coordination and spatial awareness  
+- Building digital navigation confidence with adaptive controls
+- Creating reproducible practice sessions for consistent assessment
 
 ## ✨ Key Features
 
@@ -22,11 +23,12 @@ This game helps users develop confidence and proficiency with directional contro
 - **Keyboard-only navigation** throughout the interface
 
 ### Educational Design
-- **Progressive difficulty** from simple to complex challenges
-- **Practice mode** with customizable settings
+- **Therapeutic sessions** with fully customizable difficulty and target types
+- **Reproducible challenges** using Replay Codes for consistent assessment
 - **Multiple target types**: Static, moving, fleeing, and bonus targets
-- **Clear feedback** with visual and audio cues
-- **Skill tracking** to monitor progress and improvement
+- **Adaptive feedback** with visual and audio cues
+- **Progress tracking** to monitor improvement over time
+- **Session-based approach** for structured therapeutic interventions
 
 ### Technology
 - **No installation required** - runs in any modern web browser
@@ -44,27 +46,28 @@ This game helps users develop confidence and proficiency with directional contro
 - **Escape**: Access pause menu
 - **Tab**: Navigate interface elements
 
-### Game Modes
-- **Level Mode**: Progressive difficulty with structured challenges
-- **Practice Mode**: Customizable experience with various target types and settings
+### Game Sessions
+- **Customizable Sessions**: Configure target count, size, movement, and input methods
+- **Replay Codes**: Use memorable codes to repeat identical sessions for assessment
+- **Therapeutic Presets**: Pre-configured sessions for common therapeutic goals
+- **Real-time Progress**: Live timer and progress tracking during sessions
 
-### Mouse Controls (Practice Mode)
+### Mouse Controls (Session Mode)
 - **Click-to-Move**: Click anywhere to move your character to that position
 - **Drag-to-Move**: Click and drag your character directly
+- **Switch Control**: Compatible with single and dual switch inputs
+- **Eye-Gaze**: Dwell time activation with visual feedback
 - **Ctrl + H**: Context-sensitive help
 - **H**: Show help information
 - **M**: Mute/unmute sounds
 
-### Switch Control (F1/F2 for testing)
-- **F1**: Advance scan or select (depending on mode)
-- **F2**: Select current highlighted option
-- Visual scanning indicators guide selection
 
 ### Gameplay
-1. **Objective**: Move your character to collect colored targets
-2. **Progression**: Complete levels by collecting all targets
-3. **Learning**: Build confidence with directional navigation
-4. **Achievement**: Unlock milestones and track improvement
+1. **Setup**: Configure session parameters (targets, size, movement, input methods)
+2. **Objective**: Move your character to collect all colored targets in the session
+3. **Assessment**: Use Replay Codes to repeat identical sessions for progress tracking
+4. **Learning**: Build confidence through adaptive, customizable challenges
+5. **Progress**: Review session history and completion times
 
 ## 🛠 Technical Setup
 
@@ -73,11 +76,12 @@ This game helps users develop confidence and proficiency with directional contro
 2. **Open `index.html`** in a web browser
 3. **Start playing** - no additional setup required!
 
-### For Educators
+### For Therapists and Educators
 1. **Host on GitHub Pages** for easy student access
-2. **Bookmark the game URL** for quick classroom access
-3. **Review progress data** available in browser settings
-4. **Customize settings** for individual student needs
+2. **Create Replay Codes** for consistent therapeutic sessions
+3. **Monitor progress** through session history and timing data
+4. **Customize sessions** for individual student needs and goals
+5. **Share challenges** with colleagues using Replay Codes
 
 ### Browser Requirements
 - **Modern web browser** (Chrome 90+, Firefox 88+, Safari 14+, Edge 90+)
@@ -87,20 +91,21 @@ This game helps users develop confidence and proficiency with directional contro
 
 ## 📊 Progress Tracking
 
-The game includes comprehensive progress tracking while maintaining student privacy:
+The game includes comprehensive progress tracking designed for therapeutic environments:
 
 ### Automatically Tracked
-- Session duration and frequency
-- Targets collected and levels completed
-- Input accuracy and movement patterns
-- Preferred accessibility settings
-- Achievement unlocks and milestones
+- Session duration and completion times
+- Target collection patterns and efficiency
+- Input method preferences and effectiveness
+- Session configuration choices and adaptations
+- Recent session history with Replay Codes
 
-### Learning Insights
-- Skill development progression
-- Areas of strength and improvement
-- Engagement and motivation levels
-- Recommended adaptations
+### Therapeutic Insights
+- Skill development progression over time
+- Response to different difficulty configurations
+- Engagement patterns and session completion rates
+- Preferred input methods and accessibility settings
+- Areas for focused intervention
 
 ### Privacy Protection
 - **No personal information** collected
@@ -110,10 +115,12 @@ The game includes comprehensive progress tracking while maintaining student priv
 
 ## 🔧 Customization
 
-### Difficulty Settings
-- **Beginner**: Large targets, slow movement, no obstacles
-- **Intermediate**: Standard gameplay with gentle challenges
-- **Advanced**: Smaller targets, moving elements, strategic thinking
+### Session Configuration
+- **Target Settings**: Count (1-15), size (small to extra-large), types (static, moving, fleeing, bonus)
+- **Player Controls**: Movement speed, trail visibility, input buffer timing
+- **Input Methods**: Keyboard, mouse click/drag, switch control, eye-gaze compatibility
+- **Environment**: Boundary options, visual/audio feedback, haptic support
+- **Replay Codes**: Memorable text codes for session reproducibility
 
 ### Accessibility Options
 - **Input method selection**: Keyboard, switch, eye-gaze, touch
@@ -121,31 +128,32 @@ The game includes comprehensive progress tracking while maintaining student priv
 - **Audio preferences**: Volume control, sound on/off, spatial audio
 - **Timing adjustments**: Movement speed, input sensitivity, scan timing
 
-### Educational Adaptations
-- **Target size adjustment** for motor skill levels
-- **Movement speed control** for processing time needs
-- **Input buffering** to prevent missed commands
-- **Visual simplification** to reduce cognitive load
+### Therapeutic Adaptations
+- **Target size and movement** adaptable for various motor skill levels
+- **Movement speed control** for processing time and reaction needs
+- **Input buffering and sensitivity** to prevent missed commands
+- **Visual simplification options** to reduce cognitive load
+- **Multi-modal feedback** supporting diverse sensory preferences
 
-## 🏫 For Educators
+## � For Therapists and Educators
 
-### Classroom Integration
-- **No technical expertise required** for basic use
-- **Works with existing assistive technology** setups
-- **Progress reports available** for individual students
-- **Customizable difficulty** for diverse ability levels
+### Therapeutic Integration
+- **No technical expertise required** for session configuration
+- **Compatible with existing assistive technology** setups
+- **Reproducible sessions** using Replay Codes for consistent assessment
+- **Customizable parameters** for diverse therapeutic goals and abilities
 
-### Learning Objectives Supported
-- **Digital navigation skills** - directional control proficiency
-- **Computer interface confidence** - reduced technology anxiety
-- **Goal-oriented behavior** - task completion and persistence
-- **Independent learning** - self-paced skill development
+### Therapeutic Objectives Supported
+- **Digital navigation skills** - directional control proficiency and confidence
+- **Motor skill development** - fine motor control and hand-eye coordination
+- **Cognitive skills** - spatial awareness, planning, and goal-directed behavior
+- **Independence building** - self-paced learning and adaptive technology use
 
-### Assessment Opportunities
-- **Skill progression tracking** over time
-- **Engagement measurement** through play patterns
-- **Adaptation effectiveness** via preference data
-- **Transfer skills evaluation** to other applications
+### Assessment and Documentation
+- **Session reproducibility** for standardized assessment using Replay Codes
+- **Progress tracking** through completion times and session history
+- **Adaptation documentation** via session configuration records
+- **Skill transfer evaluation** to other digital environments
 
 ## 🧪 Testing and Quality Assurance
 
@@ -162,56 +170,47 @@ The game includes comprehensive progress tracking while maintaining student priv
 - **Mobile compatibility**: iOS Safari, Chrome Mobile, Samsung Internet
 - **Graceful degradation** for unsupported features
 
-### Educational Validation
-- **Developed with assistive technology specialist** input
-- **Designed for real classroom needs** and constraints
-- **Tested for engagement** and learning effectiveness
-- **Iteratively improved** based on educator feedback
+### Therapeutic Validation
+- **Developed with occupational therapy specialist** input
+- **Designed for real therapeutic needs** and constraints
+- **Tested for engagement** and therapeutic effectiveness
+- **Iteratively improved** based on therapist and student feedback
 
 ## 📂 Project Structure
 
 ```
 directional-skills-game/
-├── index.html              # Main game interface
+├── index.html              # Main game interface with session setup
 ├── styles.css              # Comprehensive styling with accessibility
-├── game.js                 # Core game logic and mechanics
-├── input-manager.js        # Universal input handling system
-├── accessibility.js        # Screen reader and a11y features
-├── audio-manager.js        # Accessible audio feedback
-├── progress-tracker.js     # Learning analytics and progress
-├── settings.html           # Configuration interface
-├── progress.html           # Progress viewing interface
-├── copilot-instructions/   # Detailed development guidelines
-│   ├── project-context.md
-│   ├── accessibility-requirements.md
-│   ├── game-mechanics.md
-│   ├── input-handling.md
-│   └── testing-guidelines.md
-├── tests/                  # Automated testing suites
-├── docs/                   # Additional documentation
-└── assets/                 # Game assets and resources
+├── game.js                 # Core session-based game logic
+├── README.md               # Project documentation
+├── .github/                # GitHub configuration
+└── copilot-instructions/   # Development guidelines
+    └── *.md               # Detailed accessibility and design requirements
 ```
 
 ## 🤝 Contributing
 
 This project welcomes contributions, especially from:
-- **Assistive technology specialists** - accessibility improvements
-- **Special education teachers** - educational feature enhancement
+- **Occupational therapists** - therapeutic approach improvements
+- **Assistive technology specialists** - accessibility enhancements
+- **Special education professionals** - educational feature development
 - **Students with disabilities** - user experience feedback
 - **Web developers** - technical improvements and bug fixes
 
 ### Development Guidelines
 - **Accessibility first** - every feature must be accessible
-- **Educational value** - changes should support learning objectives
-- **Performance conscious** - maintain compatibility with older hardware
+- **Therapeutic value** - changes should support therapeutic objectives
+- **Reproducibility** - maintain session consistency via Replay Codes
+- **Performance conscious** - maintain compatibility with assistive technology
 - **Documentation complete** - all changes require clear documentation
 
 ## 📜 License
 
-This educational game is released under the MIT License, encouraging:
-- **Free use** in educational settings
-- **Modification** for specific student needs
-- **Distribution** to support accessibility in education
+This therapeutic game is released under the MIT License, encouraging:
+- **Free use** in therapeutic and educational settings
+- **Modification** for specific patient and student needs
+- **Distribution** to support accessibility in healthcare and education
 - **Commercial adaptation** with attribution
 
 ## 🆘 Support
@@ -222,11 +221,11 @@ This educational game is released under the MIT License, encouraging:
 - Try refreshing the page or clearing browser cache
 - Test with a different browser
 
-### For Educational Questions
-- Review the included documentation in `docs/`
-- Check the progress tracking features for learning insights
-- Experiment with different accessibility settings
-- Consider the game as part of a broader digital skills curriculum
+### For Therapeutic Questions
+- Review session configuration options for therapeutic goals
+- Experiment with Replay Codes for consistent assessment
+- Check the session history features for progress insights
+- Consider the game as part of a broader therapeutic intervention plan
 
 ### For Accessibility Concerns
 - Test with your specific assistive technology setup
@@ -236,12 +235,13 @@ This educational game is released under the MIT License, encouraging:
 
 ## 🌟 Acknowledgments
 
-This project was developed with the understanding that accessible design benefits everyone. Special thanks to:
-- **Assistive technology users** who provided invaluable feedback
-- **Special education professionals** who guided the educational approach
-- **Web accessibility experts** who ensured inclusive implementation
+This project was developed with the understanding that accessible design benefits everyone, particularly in therapeutic contexts. Special thanks to:
+- **Students with disabilities** who provided invaluable feedback
+- **Occupational therapists** who guided the therapeutic approach
+- **Assistive technology specialists** who ensured inclusive implementation
+- **Special education professionals** who shaped the educational framework
 - **The broader disability community** for advocating for digital inclusion
 
 ---
 
-**Made with accessibility, education, and inclusion at the heart of every design decision.**
+**Made with accessibility, therapeutic value, and inclusion at the heart of every design decision.**
