@@ -25,7 +25,8 @@ class DirectionalSkillsGame {
                 stationary: 5,
                 moving: 0,
                 flee: 0,
-                bonus: 0
+                bonus: 0,
+                hazard: 0
             },
             targetSize: 'medium', // 'small', 'medium', 'large', 'extra-large'
             playerSpeed: 3,
@@ -244,7 +245,7 @@ class DirectionalSkillsGame {
         const targetSize = targetSizes[this.sessionConfig.targetSize] || 30;
         
         // Create targets based on individual counts
-        const targetTypes = ['stationary', 'moving', 'flee', 'bonus'];
+        const targetTypes = ['stationary', 'moving', 'flee', 'bonus', 'hazard'];
         let totalTargets = 0;
         
         for (const type of targetTypes) {
@@ -273,6 +274,26 @@ class DirectionalSkillsGame {
         }
         
         this.currentSession.totalTargets = totalTargets;
+        
+        // Calculate total core targets (static, moving, flee) for progress tracking
+        this.currentSession.totalCoreTargets = (this.sessionConfig.targetCounts.stationary || 0) + 
+                                               (this.sessionConfig.targetCounts.moving || 0) + 
+                                               (this.sessionConfig.targetCounts.flee || 0);
+        
+        // Ensure at least one core target for a valid session
+        if (this.currentSession.totalCoreTargets === 0 && totalTargets > 0) {
+            // If only bonus/hazard targets, add one static target
+            currentSeed++;
+            const target = this.createSeededTarget('static', targetSize, currentSeed);
+            if (target) {
+                this.targets.push(target);
+                this.currentSession.totalCoreTargets = 1;
+                totalTargets++;
+            }
+        }
+        
+        this.currentSession.totalTargets = totalTargets;
+        
         this.updateUI();
     }
     
@@ -645,17 +666,33 @@ class DirectionalSkillsGame {
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (distance < this.player.size + target.size) {
-                this.collectTarget(i);
+                if (target.type === 'hazard') {
+                    this.handleHazardCollision(target, i);
+                } else {
+                    this.collectTarget(i);
+                }
             }
         }
     }
     
     collectTarget(index) {
+        const target = this.targets[index];
+        
         // Remove target
         this.targets.splice(index, 1);
         
-        // Update session counters
-        this.currentSession.targetsCollected++;
+        // Handle different target effects
+        if (target.type === 'bonus') {
+            // Bonus targets reduce time (reward)
+            const timeReduction = target.timeBonus || 5;
+            this.currentSession.timeElapsed = Math.max(0, this.currentSession.timeElapsed - timeReduction);
+            this.showBonusEffect(timeReduction);
+            this.announceToScreenReader(`Bonus collected! Time reduced by ${timeReduction} seconds.`);
+        } else {
+            // Regular targets just count toward completion
+            this.currentSession.targetsCollected++;
+            this.announceToScreenReader(`Target collected! Progress toward completion.`);
+        }
         
         // Play collect sound
         if (this.sounds.collect) this.sounds.collect();
@@ -663,13 +700,80 @@ class DirectionalSkillsGame {
         // Update UI
         this.updateUI();
         
-        // Announce to screen reader
-        this.announceToScreenReader(`Target collected! ${this.targets.length} targets remaining.`);
-        
-        // Check if session complete
-        if (this.targets.length === 0) {
+        // Check if session complete - only core targets (static, moving, fleeing) count toward completion
+        const coreTargets = this.targets.filter(t => ['static', 'moving', 'flee'].includes(t.type));
+        if (coreTargets.length === 0) {
             this.completeSession();
         }
+    }
+
+    handleHazardCollision(target, index) {
+        // Apply time penalty
+        const penalty = target.timePenalty || 5;
+        this.currentSession.timeElapsed += penalty;
+        
+        // Remove the hazard target (one-time penalty)
+        this.targets.splice(index, 1);
+        
+        // Visual and audio feedback
+        this.showHazardWarning(penalty);
+        if (this.sounds.warning) this.sounds.warning();
+        
+        // Update UI
+        this.updateUI();
+        
+        // Announce to screen reader
+        this.announceToScreenReader(`Hazard avoided! Time penalty: ${penalty} seconds.`);
+        
+        // Check if session complete - only core targets (static, moving, fleeing) count toward completion
+        const coreTargets = this.targets.filter(t => ['static', 'moving', 'flee'].includes(t.type));
+        if (coreTargets.length === 0) {
+            this.completeSession();
+        }
+    }
+
+    showHazardWarning(penalty) {
+        // Create a visual warning overlay
+        const warning = document.createElement('div');
+        warning.className = 'hazard-warning';
+        warning.innerHTML = `
+            <div class="hazard-warning-content">
+                <div class="hazard-icon">⚠️</div>
+                <div class="hazard-text">Time Penalty</div>
+                <div class="hazard-penalty">+${penalty} seconds</div>
+            </div>
+        `;
+        
+        document.body.appendChild(warning);
+        
+        // Remove warning after animation
+        setTimeout(() => {
+            if (warning.parentNode) {
+                warning.parentNode.removeChild(warning);
+            }
+        }, 2000);
+    }
+
+    showBonusEffect(timeReduction) {
+        // Create a visual bonus overlay
+        const bonus = document.createElement('div');
+        bonus.className = 'bonus-effect';
+        bonus.innerHTML = `
+            <div class="bonus-effect-content">
+                <div class="bonus-icon">⭐</div>
+                <div class="bonus-text">Time Bonus!</div>
+                <div class="bonus-reduction">-${timeReduction} seconds</div>
+            </div>
+        `;
+        
+        document.body.appendChild(bonus);
+        
+        // Remove bonus effect after animation
+        setTimeout(() => {
+            if (bonus.parentNode) {
+                bonus.parentNode.removeChild(bonus);
+            }
+        }, 2000);
     }
 
     createPracticeTarget(type, size) {
@@ -725,13 +829,13 @@ class DirectionalSkillsGame {
             case 'static':
                 return {
                     ...baseTarget,
-                    color: '#e74c3c'
+                    color: '#27ae60' // Green - safe, basic collection
                 };
                 
             case 'moving':
                 return {
                     ...baseTarget,
-                    color: '#3498db',
+                    color: '#3498db', // Blue - keep existing, good contrast
                     velocity: {
                         x: seed !== null ? (this.seededRandom(seed + 100) - 0.5) * 2 : (Math.random() - 0.5) * 2,
                         y: seed !== null ? (this.seededRandom(seed + 200) - 0.5) * 2 : (Math.random() - 0.5) * 2
@@ -742,7 +846,7 @@ class DirectionalSkillsGame {
             case 'flee':
                 return {
                     ...baseTarget,
-                    color: '#f39c12',
+                    color: '#9b59b6', // Purple - advanced challenge, distinct from others
                     fleeSpeed: 1.5,
                     detectionRadius: size * 4,
                     velocity: { x: 0, y: 0 }
@@ -751,15 +855,26 @@ class DirectionalSkillsGame {
             case 'bonus':
                 return {
                     ...baseTarget,
-                    color: '#f1c40f',
+                    color: '#f39c12', // Gold - valuable reward feeling
                     pulsePhase: seed !== null ? this.seededRandom(seed + 300) * Math.PI * 2 : Math.random() * Math.PI * 2,
-                    bonusMultiplier: 2
+                    bonusMultiplier: 2,
+                    timeBonus: 5 // 5 seconds time reduction
+                };
+                
+            case 'hazard':
+                return {
+                    ...baseTarget,
+                    color: '#e74c3c', // Red - universal danger color
+                    collectible: false, // Cannot be collected for points
+                    timePenalty: 5, // 5 second time penalty
+                    pulsePhase: seed !== null ? this.seededRandom(seed + 400) * Math.PI * 2 : Math.random() * Math.PI * 2,
+                    hazardEffect: 'warning' // Visual warning effect
                 };
                 
             default:
                 return {
                     ...baseTarget,
-                    color: '#e74c3c'
+                    color: '#27ae60' // Default to green static
                 };
         }
     }
@@ -779,6 +894,10 @@ class DirectionalSkillsGame {
                     
                 case 'bonus':
                     this.updateBonusTarget(target, currentTime);
+                    break;
+                    
+                case 'hazard':
+                    this.updateHazardTarget(target, currentTime);
                     break;
             }
         }
@@ -841,6 +960,14 @@ class DirectionalSkillsGame {
     updateBonusTarget(target, currentTime) {
         // Update pulse animation
         target.pulsePhase += 0.1;
+        if (target.pulsePhase > Math.PI * 2) {
+            target.pulsePhase -= Math.PI * 2;
+        }
+    }
+
+    updateHazardTarget(target, currentTime) {
+        // Update warning pulse animation (faster than bonus)
+        target.pulsePhase += 0.15; // Faster pulse to indicate danger
         if (target.pulsePhase > Math.PI * 2) {
             target.pulsePhase -= Math.PI * 2;
         }
@@ -1167,6 +1294,25 @@ class DirectionalSkillsGame {
                 size = target.size * pulseScale;
                 break;
                 
+            case 'hazard':
+                // Hazard targets pulse urgently with warning glow
+                pulseScale = 1 + Math.sin(target.pulsePhase) * 0.4;
+                size = target.size * pulseScale;
+                
+                // Draw warning glow effect
+                this.ctx.shadowColor = '#e74c3c';
+                this.ctx.shadowBlur = 20;
+                
+                // Add flashing border for extra visibility
+                if (Math.sin(target.pulsePhase * 2) > 0) {
+                    this.ctx.strokeStyle = '#ffffff';
+                    this.ctx.lineWidth = 3;
+                    this.ctx.beginPath();
+                    this.ctx.arc(target.x, target.y, size + 5, 0, Math.PI * 2);
+                    this.ctx.stroke();
+                }
+                break;
+                
             default:
                 // Static targets with gentle pulse
                 pulseScale = 1 + Math.sin(Date.now() * 0.003) * 0.1;
@@ -1212,6 +1358,9 @@ class DirectionalSkillsGame {
             case 'flee':
                 indicator = '!';
                 break;
+            case 'hazard':
+                indicator = '⚠';
+                break;
         }
         
         if (indicator) {
@@ -1256,8 +1405,11 @@ class DirectionalSkillsGame {
     }
     
     updateUI() {
-        // Update progress bar
-        const progress = (this.currentSession.targetsCollected / this.currentSession.totalTargets) * 100;
+        // Update progress bar - only count core targets for progress
+        const coreTargets = this.targets.filter(t => ['static', 'moving', 'flee'].includes(t.type));
+        const coreTargetsCollected = this.currentSession.totalCoreTargets - coreTargets.length;
+        const progress = this.currentSession.totalCoreTargets > 0 ? 
+            (coreTargetsCollected / this.currentSession.totalCoreTargets) * 100 : 100;
         document.getElementById('progress-fill').style.width = `${progress}%`;
         
         // Update stats modal with session-based statistics
@@ -1415,6 +1567,9 @@ class DirectionalSkillsGame {
         document.getElementById('target-bonus-count').value = this.sessionConfig.targetCounts.bonus;
         document.getElementById('target-bonus-count-value').textContent = this.sessionConfig.targetCounts.bonus;
         
+        document.getElementById('target-hazard-count').value = this.sessionConfig.targetCounts.hazard;
+        document.getElementById('target-hazard-count-value').textContent = this.sessionConfig.targetCounts.hazard;
+        
         // Update total
         this.updateTotalTargets();
         
@@ -1461,6 +1616,11 @@ class DirectionalSkillsGame {
             this.updateTotalTargets();
         });
         
+        document.getElementById('target-hazard-count').addEventListener('input', (e) => {
+            document.getElementById('target-hazard-count-value').textContent = e.target.value;
+            this.updateTotalTargets();
+        });
+        
         // Player speed slider
         document.getElementById('player-speed').addEventListener('input', (e) => {
             this.updatePlayerSpeedLabel(e.target.value);
@@ -1477,7 +1637,8 @@ class DirectionalSkillsGame {
         const moving = parseInt(document.getElementById('target-moving-count').value) || 0;
         const flee = parseInt(document.getElementById('target-flee-count').value) || 0;
         const bonus = parseInt(document.getElementById('target-bonus-count').value) || 0;
-        const total = stationary + moving + flee + bonus;
+        const hazard = parseInt(document.getElementById('target-hazard-count').value) || 0;
+        const total = stationary + moving + flee + bonus + hazard;
         document.getElementById('total-targets-value').textContent = total;
     }
 
@@ -1513,6 +1674,7 @@ class DirectionalSkillsGame {
         this.sessionConfig.targetCounts.moving = parseInt(document.getElementById('target-moving-count').value);
         this.sessionConfig.targetCounts.flee = parseInt(document.getElementById('target-flee-count').value);
         this.sessionConfig.targetCounts.bonus = parseInt(document.getElementById('target-bonus-count').value);
+        this.sessionConfig.targetCounts.hazard = parseInt(document.getElementById('target-hazard-count').value);
         this.sessionConfig.targetSize = document.querySelector('input[name="target-size"]:checked').value;
         
         // Player settings
@@ -1577,7 +1739,7 @@ class DirectionalSkillsGame {
         
         const presets = {
             'first-steps': {
-                targetCounts: { static: 1, moving: 0, flee: 0, bonus: 0 },
+                targetCounts: { stationary: 1, moving: 0, flee: 0, bonus: 0, hazard: 0 },
                 targetSize: 'extra-large',
                 playerSpeed: 1,
                 playerTrail: 'short',
@@ -1587,7 +1749,7 @@ class DirectionalSkillsGame {
                 feedback: { audio: true, visual: true, haptic: false }
             },
             'building-confidence': {
-                targetCounts: { static: 3, moving: 0, flee: 0, bonus: 0 },
+                targetCounts: { stationary: 5, moving: 0, flee: 0, bonus: 1, hazard: 0 },
                 targetSize: 'large',
                 playerSpeed: 2,
                 playerTrail: 'short',
@@ -1597,7 +1759,7 @@ class DirectionalSkillsGame {
                 feedback: { audio: true, visual: true, haptic: false }
             },
             'precision-practice': {
-                targetCounts: { static: 4, moving: 0, flee: 0, bonus: 1 },
+                targetCounts: { stationary: 6, moving: 2, flee: 0, bonus: 2, hazard: 0 },
                 targetSize: 'medium',
                 playerSpeed: 3,
                 playerTrail: 'short',
@@ -1607,12 +1769,32 @@ class DirectionalSkillsGame {
                 feedback: { audio: true, visual: true, haptic: false }
             },
             'dynamic-challenge': {
-                targetCounts: { static: 1, moving: 1, flee: 1, bonus: 1 },
+                targetCounts: { stationary: 3, moving: 3, flee: 2, bonus: 2, hazard: 0 },
                 targetSize: 'medium',
                 playerSpeed: 3,
                 playerTrail: 'long',
                 inputMethods: { keyboard: true, mouseClick: true },
                 inputBuffer: 200,
+                boundaries: 'visual',
+                feedback: { audio: true, visual: true, haptic: false }
+            },
+            'strategic-navigation': {
+                targetCounts: { stationary: 4, moving: 2, flee: 1, bonus: 3, hazard: 2 },
+                targetSize: 'medium',
+                playerSpeed: 3,
+                playerTrail: 'short',
+                inputMethods: { keyboard: true, mouseClick: true },
+                inputBuffer: 250,
+                boundaries: 'visual',
+                feedback: { audio: true, visual: true, haptic: false }
+            },
+            'intensive-practice': {
+                targetCounts: { stationary: 8, moving: 0, flee: 0, bonus: 2, hazard: 0 },
+                targetSize: 'small',
+                playerSpeed: 4,
+                playerTrail: 'short',
+                inputMethods: { keyboard: true, mouseClick: true },
+                inputBuffer: 150,
                 boundaries: 'visual',
                 feedback: { audio: true, visual: true, haptic: false }
             }

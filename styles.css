@@ -769,3 +769,129 @@ html, body {
         width: 200px;
     }
 }
+
+/* Hazard Warning Styles */
+.hazard-warning {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10000;
+    pointer-events: none;
+    animation: hazardWarningShow 2s ease-out forwards;
+}
+
+.hazard-warning-content {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+    color: white;
+    padding: 20px 30px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(231, 76, 60, 0.4);
+    border: 3px solid #ffffff;
+}
+
+.hazard-icon {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    animation: hazardPulse 0.5s ease-in-out infinite alternate;
+}
+
+.hazard-text {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.hazard-penalty {
+    font-size: 1rem;
+    opacity: 0.9;
+}
+
+@keyframes hazardWarningShow {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.5);
+    }
+    20% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+@keyframes hazardPulse {
+    0% {
+        transform: scale(1);
+    }
+    100% {
+        transform: scale(1.2);
+    }
+}
+
+/* Bonus Effect Styles */
+.bonus-effect {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10000;
+    pointer-events: none;
+    animation: bonusEffectShow 2s ease-out forwards;
+}
+
+.bonus-effect-content {
+    background: linear-gradient(135deg, #f39c12, #e67e22);
+    color: white;
+    padding: 20px 30px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(243, 156, 18, 0.4);
+    border: 3px solid #ffffff;
+}
+
+.bonus-icon {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    animation: bonusSparkle 0.6s ease-in-out infinite alternate;
+}
+
+.bonus-text {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.bonus-reduction {
+    font-size: 1rem;
+    opacity: 0.9;
+}
+
+@keyframes bonusEffectShow {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.5) rotate(-10deg);
+    }
+    20% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1.2) rotate(5deg);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    }
+}
+
+@keyframes bonusSparkle {
+    0% {
+        transform: scale(1) rotate(0deg);
+        filter: brightness(1);
+    }
+    100% {
+        transform: scale(1.1) rotate(5deg);
+        filter: brightness(1.3);
+    }
+}

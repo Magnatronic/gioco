@@ -92,7 +92,7 @@
             <div class="progress-container">
                 <div class="progress-bar" role="progressbar" 
                      aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
-                     aria-label="Session progress">
+                     aria-label="Core targets completion progress">
                     <div class="progress-fill" id="progress-fill"></div>
                 </div>
             </div>
@@ -181,7 +181,7 @@
                                 <div class="target-slider-group">
                                     <label for="target-moving-count">Moving Targets:</label>
                                     <div class="input-with-value">
-                                        <input type="range" id="target-moving-count" min="0" max="8" value="0">
+                                        <input type="range" id="target-moving-count" min="0" max="10" value="0">
                                         <span id="target-moving-count-value" class="range-value">0</span>
                                     </div>
                                     <small class="field-help">Targets that move slowly in predictable patterns</small>
@@ -190,7 +190,7 @@
                                 <div class="target-slider-group">
                                     <label for="target-flee-count">Fleeing Targets:</label>
                                     <div class="input-with-value">
-                                        <input type="range" id="target-flee-count" min="0" max="5" value="0">
+                                        <input type="range" id="target-flee-count" min="0" max="10" value="0">
                                         <span id="target-flee-count-value" class="range-value">0</span>
                                     </div>
                                     <small class="field-help">Advanced targets that move away when approached</small>
@@ -199,10 +199,19 @@
                                 <div class="target-slider-group">
                                     <label for="target-bonus-count">Bonus Targets:</label>
                                     <div class="input-with-value">
-                                        <input type="range" id="target-bonus-count" min="0" max="3" value="0">
+                                        <input type="range" id="target-bonus-count" min="0" max="10" value="0">
                                         <span id="target-bonus-count-value" class="range-value">0</span>
                                     </div>
-                                    <small class="field-help">Special targets that provide extra motivation</small>
+                                    <small class="field-help">Special targets that reduce time when collected (optional reward)</small>
+                                </div>
+                                
+                                <div class="target-slider-group">
+                                    <label for="target-hazard-count">Hazard Targets:</label>
+                                    <div class="input-with-value">
+                                        <input type="range" id="target-hazard-count" min="0" max="10" value="0">
+                                        <span id="target-hazard-count-value" class="range-value">0</span>
+                                    </div>
+                                    <small class="field-help">Targets to avoid - add time penalty when touched (optional challenge)</small>
                                 </div>
                                 
                                 <div class="total-targets">
@@ -291,8 +300,10 @@
                         <option value="">Choose a preset...</option>
                         <option value="first-steps">First Steps (Beginner)</option>
                         <option value="building-confidence">Building Confidence</option>
-                        <option value="precision-practice">Precision Practice</option>
+                        <option value="precision-practice">Precision Practice (with Time Bonus)</option>
                         <option value="dynamic-challenge">Dynamic Challenge</option>
+                        <option value="strategic-navigation">Strategic Navigation (Hazards + Rewards)</option>
+                        <option value="intensive-practice">Intensive Practice (High Volume)</option>
                     </select>
                     <button class="btn btn-secondary" id="save-preset">Save as Preset</button>
                 </div>
