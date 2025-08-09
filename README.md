@@ -54,7 +54,6 @@ This therapeutic game helps students with physical and learning difficulties dev
 
 ### Mouse Controls (Session Mode)
 - **Click-to-Move**: Click anywhere to move your character to that position
-- **Drag-to-Move**: Click and drag your character directly
 - **Switch Control**: Compatible with single and dual switch inputs
 - **Eye-Gaze**: Dwell time activation with visual feedback
 - **Ctrl + H**: Context-sensitive help
@@ -116,9 +115,9 @@ The game includes comprehensive progress tracking designed for therapeutic envir
 ## 🔧 Customization
 
 ### Session Configuration
-- **Target Settings**: Count (1-15), size (small to extra-large), types (static, moving, fleeing, bonus)
+- **Target Settings**: Individual counts for each type (static, moving, fleeing, bonus), size (small to extra-large)
 - **Player Controls**: Movement speed, trail visibility, input buffer timing
-- **Input Methods**: Keyboard, mouse click/drag, switch control, eye-gaze compatibility
+- **Input Methods**: Keyboard, mouse click, switch control, eye-gaze compatibility
 - **Environment**: Boundary options, visual/audio feedback, haptic support
 - **Replay Codes**: Memorable text codes for session reproducibility
 

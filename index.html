@@ -167,10 +167,47 @@
                         </div>
                         
                         <div class="form-group">
-                            <label for="target-count">Number of Targets:</label>
-                            <div class="input-with-value">
-                                <input type="range" id="target-count" min="1" max="15" value="5">
-                                <span id="target-count-value" class="range-value">5</span>
+                            <label>Target Configuration:</label>
+                            <div class="target-sliders">
+                                <div class="target-slider-group">
+                                    <label for="target-static-count">Static Targets:</label>
+                                    <div class="input-with-value">
+                                        <input type="range" id="target-static-count" min="0" max="10" value="5">
+                                        <span id="target-static-count-value" class="range-value">5</span>
+                                    </div>
+                                    <small class="field-help">Basic stationary targets for fundamental navigation practice</small>
+                                </div>
+                                
+                                <div class="target-slider-group">
+                                    <label for="target-moving-count">Moving Targets:</label>
+                                    <div class="input-with-value">
+                                        <input type="range" id="target-moving-count" min="0" max="8" value="0">
+                                        <span id="target-moving-count-value" class="range-value">0</span>
+                                    </div>
+                                    <small class="field-help">Targets that move slowly in predictable patterns</small>
+                                </div>
+                                
+                                <div class="target-slider-group">
+                                    <label for="target-flee-count">Fleeing Targets:</label>
+                                    <div class="input-with-value">
+                                        <input type="range" id="target-flee-count" min="0" max="5" value="0">
+                                        <span id="target-flee-count-value" class="range-value">0</span>
+                                    </div>
+                                    <small class="field-help">Advanced targets that move away when approached</small>
+                                </div>
+                                
+                                <div class="target-slider-group">
+                                    <label for="target-bonus-count">Bonus Targets:</label>
+                                    <div class="input-with-value">
+                                        <input type="range" id="target-bonus-count" min="0" max="3" value="0">
+                                        <span id="target-bonus-count-value" class="range-value">0</span>
+                                    </div>
+                                    <small class="field-help">Special targets that provide extra motivation</small>
+                                </div>
+                                
+                                <div class="total-targets">
+                                    <strong>Total Targets: <span id="total-targets-value">5</span></strong>
+                                </div>
                             </div>
                         </div>
                         
@@ -181,16 +218,6 @@
                                 <label><input type="radio" name="target-size" value="medium" checked> Medium</label>
                                 <label><input type="radio" name="target-size" value="large"> Large</label>
                                 <label><input type="radio" name="target-size" value="extra-large"> Extra Large</label>
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Target Types:</label>
-                            <div class="checkbox-group">
-                                <label><input type="checkbox" id="target-static" checked> Static</label>
-                                <label><input type="checkbox" id="target-moving"> Slow Moving</label>
-                                <label><input type="checkbox" id="target-flee"> Move Away When Approached</label>
-                                <label><input type="checkbox" id="target-bonus"> Bonus Targets</label>
                             </div>
                         </div>
                     </fieldset>
@@ -223,7 +250,6 @@
                             <div class="checkbox-group">
                                 <label><input type="checkbox" id="input-keyboard" checked> Keyboard (Arrow Keys + WASD)</label>
                                 <label><input type="checkbox" id="input-mouse-click"> Mouse Click-to-Move</label>
-                                <label><input type="checkbox" id="input-mouse-drag"> Mouse Drag-to-Move</label>
                             </div>
                         </div>
                         

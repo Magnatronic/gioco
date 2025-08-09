@@ -21,20 +21,18 @@ class DirectionalSkillsGame {
         
         // Session configuration (formerly practice mode configuration)
         this.sessionConfig = {
-            targetCount: 5,
-            targetSize: 'medium', // 'small', 'medium', 'large', 'extra-large'
-            targetTypes: {
-                static: true,
-                moving: false,
-                flee: false,
-                bonus: false
+            targetCounts: {
+                stationary: 5,
+                moving: 0,
+                flee: 0,
+                bonus: 0
             },
+            targetSize: 'medium', // 'small', 'medium', 'large', 'extra-large'
             playerSpeed: 3,
             playerTrail: 'short', // 'off', 'short', 'long'
             inputMethods: {
                 keyboard: true,
-                mouseClick: false,
-                mouseDrag: false
+                mouseClick: true
             },
             inputBuffer: 300,
             boundaries: 'none', // 'none', 'visual', 'hard'
@@ -69,7 +67,6 @@ class DirectionalSkillsGame {
             size: 25,
             color: '#3498db',
             trail: [],
-            isDragging: false,
             targetX: null,
             targetY: null
         };
@@ -246,34 +243,36 @@ class DirectionalSkillsGame {
         };
         const targetSize = targetSizes[this.sessionConfig.targetSize] || 30;
         
-        // Count how many of each type to create
-        const activeTypes = Object.keys(this.sessionConfig.targetTypes).filter(
-            type => this.sessionConfig.targetTypes[type]
-        );
+        // Create targets based on individual counts
+        const targetTypes = ['stationary', 'moving', 'flee', 'bonus'];
+        let totalTargets = 0;
         
-        if (activeTypes.length === 0) {
-            // Default to static if no types selected
-            activeTypes.push('static');
-        }
-        
-        // Distribute targets among active types
-        const targetsPerType = Math.floor(this.sessionConfig.targetCount / activeTypes.length);
-        const extraTargets = this.sessionConfig.targetCount % activeTypes.length;
-        
-        for (let i = 0; i < activeTypes.length; i++) {
-            const type = activeTypes[i];
-            const count = targetsPerType + (i < extraTargets ? 1 : 0);
+        for (const type of targetTypes) {
+            const count = this.sessionConfig.targetCounts[type] || 0;
+            totalTargets += count;
             
             for (let j = 0; j < count; j++) {
                 currentSeed++;
-                const target = this.createSeededTarget(type, targetSize, currentSeed);
+                // Map 'stationary' back to 'static' for target creation
+                const targetType = type === 'stationary' ? 'static' : type;
+                const target = this.createSeededTarget(targetType, targetSize, currentSeed);
                 if (target) {
                     this.targets.push(target);
                 }
             }
         }
         
-        this.currentSession.totalTargets = this.sessionConfig.targetCount;
+        // Ensure at least one target exists
+        if (totalTargets === 0) {
+            currentSeed++;
+            const target = this.createSeededTarget('static', targetSize, currentSeed);
+            if (target) {
+                this.targets.push(target);
+                totalTargets = 1;
+            }
+        }
+        
+        this.currentSession.totalTargets = totalTargets;
         this.updateUI();
     }
     
@@ -314,14 +313,14 @@ class DirectionalSkillsGame {
             }
             
             if (!tooClose) {
-                return this.createTargetByType(type, x, y, size);
+                return this.createTargetByType(type, x, y, size, seed);
             }
         }
         
         // Fallback: create at seeded position if spacing fails
         const x = margin + this.seededRandom(seed) * (this.canvas.width - 2 * margin);
         const y = margin + this.seededRandom(seed + 1) * (this.canvas.height - 2 * margin);
-        return this.createTargetByType(type, x, y, size);
+        return this.createTargetByType(type, x, y, size, seed);
     }
     
     setupCanvas() {
@@ -517,17 +516,9 @@ class DirectionalSkillsGame {
     }
     
     setupMouseEvents() {
-        // Basic mouse event setup - can be enhanced based on session config
+        // Basic mouse event setup for click-to-move
         if (this.sessionConfig.inputMethods.mouseClick) {
             this.canvas.addEventListener('click', (e) => this.handleMouseClick(e));
-            this.setCursor('crosshair');
-        }
-        
-        if (this.sessionConfig.inputMethods.mouseDrag) {
-            this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-            this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-            this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-            this.canvas.addEventListener('mouseleave', (e) => this.handleMouseUp(e));
             this.setCursor('crosshair');
         }
     }
@@ -645,81 +636,6 @@ class DirectionalSkillsGame {
         
         this.announceToScreenReader(`Moving to position ${Math.round(targetX)}, ${Math.round(targetY)}`);
     }
-
-    handleMouseDown(e) {
-        if (!this.sessionConfig.inputMethods.mouseDrag || this.gameState !== 'playing') return;
-        
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        
-        // Check if clicking on player
-        const dx = mouseX - this.player.x;
-        const dy = mouseY - this.player.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance <= this.player.size * 2) { // Give some tolerance for easier grabbing
-            this.player.isDragging = true;
-            this.setCursor('grabbing');
-            
-            // Offset from player center to mouse position
-            this.player.dragOffsetX = mouseX - this.player.x;
-            this.player.dragOffsetY = mouseY - this.player.y;
-            
-            this.announceToScreenReader('Player selected for dragging');
-        }
-    }
-
-    handleMouseMove(e) {
-        if (!this.sessionConfig.inputMethods.mouseDrag || this.gameState !== 'playing') return;
-        
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        
-        if (this.player.isDragging) {
-            const oldX = this.player.x;
-            const oldY = this.player.y;
-            
-            // Update player position with offset
-            this.player.x = mouseX - this.player.dragOffsetX;
-            this.player.y = mouseY - this.player.dragOffsetY;
-            
-            // Keep player within bounds
-            this.player.x = Math.max(this.player.size, Math.min(this.canvas.width - this.player.size, this.player.x));
-            this.player.y = Math.max(this.player.size, Math.min(this.canvas.height - this.player.size, this.player.y));
-            
-            // Add to trail if moved
-            if (oldX !== this.player.x || oldY !== this.player.y) {
-                this.addToTrail(oldX, oldY);
-                
-                // Check for collisions
-                this.checkCollisions();
-            }
-        } else {
-            // Update cursor based on hover state
-            const dx = mouseX - this.player.x;
-            const dy = mouseY - this.player.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance <= this.player.size * 2) {
-                this.setCursor('grab');
-            } else {
-                // Use custom crosshair cursor for better visibility
-                this.setCursor('crosshair');
-            }
-        }
-    }
-
-    handleMouseUp(e) {
-        if (!this.sessionConfig.inputMethods.mouseDrag || this.gameState !== 'playing') return;
-        
-        if (this.player.isDragging) {
-            this.player.isDragging = false;
-            this.setCursor('crosshair');
-            this.announceToScreenReader('Player released');
-        }
-    }
     
     checkCollisions() {
         for (let i = this.targets.length - 1; i >= 0; i--) {
@@ -756,48 +672,6 @@ class DirectionalSkillsGame {
         }
     }
 
-    generatePracticeTargets() {
-        this.targets = [];
-        
-        // Get target size from practice config
-        const targetSizes = {
-            'small': 20,
-            'medium': 30,
-            'large': 40,
-            'extra-large': 50
-        };
-        const targetSize = targetSizes[this.sessionConfig.targetSize] || 30;
-        
-        // Count how many of each type to create
-        const activeTypes = Object.keys(this.sessionConfig.targetTypes).filter(
-            type => this.sessionConfig.targetTypes[type]
-        );
-        
-        if (activeTypes.length === 0) {
-            // Default to static if no types selected
-            activeTypes.push('static');
-        }
-        
-        // Distribute targets among active types
-        const targetsPerType = Math.floor(this.sessionConfig.targetCount / activeTypes.length);
-        const extraTargets = this.sessionConfig.targetCount % activeTypes.length;
-        
-        for (let i = 0; i < activeTypes.length; i++) {
-            const type = activeTypes[i];
-            const count = targetsPerType + (i < extraTargets ? 1 : 0);
-            
-            for (let j = 0; j < count; j++) {
-                const target = this.createPracticeTarget(type, targetSize);
-                if (target) {
-                    this.targets.push(target);
-                }
-            }
-        }
-        
-        this.totalTargets = this.sessionConfig.targetCount;
-        this.updateUI();
-    }
-
     createPracticeTarget(type, size) {
         const margin = size + 20;
         const maxAttempts = 50;
@@ -826,17 +700,17 @@ class DirectionalSkillsGame {
             }
             
             if (!tooClose) {
-                return this.createTargetByType(type, x, y, size);
+                return this.createTargetByType(type, x, y, size, null);
             }
         }
         
         // Fallback: create at random position if spacing fails
         const x = margin + Math.random() * (this.canvas.width - 2 * margin);
         const y = margin + Math.random() * (this.canvas.height - 2 * margin);
-        return this.createTargetByType(type, x, y, size);
+        return this.createTargetByType(type, x, y, size, null);
     }
 
-    createTargetByType(type, x, y, size) {
+    createTargetByType(type, x, y, size, seed = null) {
         const baseTarget = {
             x,
             y,
@@ -859,8 +733,8 @@ class DirectionalSkillsGame {
                     ...baseTarget,
                     color: '#3498db',
                     velocity: {
-                        x: (this.seededRandom(seed + 100) - 0.5) * 2, // Seeded velocity between -1 and 1
-                        y: (this.seededRandom(seed + 200) - 0.5) * 2
+                        x: seed !== null ? (this.seededRandom(seed + 100) - 0.5) * 2 : (Math.random() - 0.5) * 2,
+                        y: seed !== null ? (this.seededRandom(seed + 200) - 0.5) * 2 : (Math.random() - 0.5) * 2
                     },
                     pattern: 'linear' // Could be 'linear', 'circular', 'bounce'
                 };
@@ -878,7 +752,7 @@ class DirectionalSkillsGame {
                 return {
                     ...baseTarget,
                     color: '#f1c40f',
-                    pulsePhase: this.seededRandom(seed + 300) * Math.PI * 2,
+                    pulsePhase: seed !== null ? this.seededRandom(seed + 300) * Math.PI * 2 : Math.random() * Math.PI * 2,
                     bonusMultiplier: 2
                 };
                 
@@ -1137,7 +1011,7 @@ class DirectionalSkillsGame {
         );
         
         // Handle click-to-move
-        if (this.player.targetX !== null && this.player.targetY !== null && !this.player.isDragging) {
+        if (this.player.targetX !== null && this.player.targetY !== null) {
             this.updateClickToMove();
         }
         
@@ -1527,17 +1401,25 @@ class DirectionalSkillsGame {
     loadSessionConfigToForm() {
         // Load current session configuration to form
         document.getElementById('session-seed').value = this.sessionConfig.seed || '';
-        document.getElementById('target-count').value = this.sessionConfig.targetCount;
-        document.getElementById('target-count-value').textContent = this.sessionConfig.targetCount;
+        
+        // Target counts
+        document.getElementById('target-static-count').value = this.sessionConfig.targetCounts.stationary;
+        document.getElementById('target-static-count-value').textContent = this.sessionConfig.targetCounts.stationary;
+        
+        document.getElementById('target-moving-count').value = this.sessionConfig.targetCounts.moving;
+        document.getElementById('target-moving-count-value').textContent = this.sessionConfig.targetCounts.moving;
+        
+        document.getElementById('target-flee-count').value = this.sessionConfig.targetCounts.flee;
+        document.getElementById('target-flee-count-value').textContent = this.sessionConfig.targetCounts.flee;
+        
+        document.getElementById('target-bonus-count').value = this.sessionConfig.targetCounts.bonus;
+        document.getElementById('target-bonus-count-value').textContent = this.sessionConfig.targetCounts.bonus;
+        
+        // Update total
+        this.updateTotalTargets();
         
         // Target size
         document.querySelector(`input[name="target-size"][value="${this.sessionConfig.targetSize}"]`).checked = true;
-        
-        // Target types
-        document.getElementById('target-static').checked = this.sessionConfig.targetTypes.static;
-        document.getElementById('target-moving').checked = this.sessionConfig.targetTypes.moving;
-        document.getElementById('target-flee').checked = this.sessionConfig.targetTypes.flee;
-        document.getElementById('target-bonus').checked = this.sessionConfig.targetTypes.bonus;
         
         // Player settings
         document.getElementById('player-speed').value = this.sessionConfig.playerSpeed;
@@ -1547,7 +1429,6 @@ class DirectionalSkillsGame {
         // Input methods
         document.getElementById('input-keyboard').checked = this.sessionConfig.inputMethods.keyboard;
         document.getElementById('input-mouse-click').checked = this.sessionConfig.inputMethods.mouseClick;
-        document.getElementById('input-mouse-drag').checked = this.sessionConfig.inputMethods.mouseDrag;
         document.getElementById('input-buffer').value = this.sessionConfig.inputBuffer;
         document.getElementById('input-buffer-value').textContent = this.sessionConfig.inputBuffer + 'ms';
         
@@ -1559,9 +1440,25 @@ class DirectionalSkillsGame {
     }
 
     setupSessionFormEvents() {
-        // Target count slider
-        document.getElementById('target-count').addEventListener('input', (e) => {
-            document.getElementById('target-count-value').textContent = e.target.value;
+        // Target count sliders
+        document.getElementById('target-static-count').addEventListener('input', (e) => {
+            document.getElementById('target-static-count-value').textContent = e.target.value;
+            this.updateTotalTargets();
+        });
+        
+        document.getElementById('target-moving-count').addEventListener('input', (e) => {
+            document.getElementById('target-moving-count-value').textContent = e.target.value;
+            this.updateTotalTargets();
+        });
+        
+        document.getElementById('target-flee-count').addEventListener('input', (e) => {
+            document.getElementById('target-flee-count-value').textContent = e.target.value;
+            this.updateTotalTargets();
+        });
+        
+        document.getElementById('target-bonus-count').addEventListener('input', (e) => {
+            document.getElementById('target-bonus-count-value').textContent = e.target.value;
+            this.updateTotalTargets();
         });
         
         // Player speed slider
@@ -1573,6 +1470,15 @@ class DirectionalSkillsGame {
         document.getElementById('input-buffer').addEventListener('input', (e) => {
             document.getElementById('input-buffer-value').textContent = e.target.value + 'ms';
         });
+    }
+
+    updateTotalTargets() {
+        const stationary = parseInt(document.getElementById('target-static-count').value) || 0;
+        const moving = parseInt(document.getElementById('target-moving-count').value) || 0;
+        const flee = parseInt(document.getElementById('target-flee-count').value) || 0;
+        const bonus = parseInt(document.getElementById('target-bonus-count').value) || 0;
+        const total = stationary + moving + flee + bonus;
+        document.getElementById('total-targets-value').textContent = total;
     }
 
     updatePlayerSpeedLabel(speed) {
@@ -1603,14 +1509,11 @@ class DirectionalSkillsGame {
         this.sessionConfig.seed = seedInput || null;
         
         // Target settings
-        this.sessionConfig.targetCount = parseInt(document.getElementById('target-count').value);
+        this.sessionConfig.targetCounts.stationary = parseInt(document.getElementById('target-static-count').value);
+        this.sessionConfig.targetCounts.moving = parseInt(document.getElementById('target-moving-count').value);
+        this.sessionConfig.targetCounts.flee = parseInt(document.getElementById('target-flee-count').value);
+        this.sessionConfig.targetCounts.bonus = parseInt(document.getElementById('target-bonus-count').value);
         this.sessionConfig.targetSize = document.querySelector('input[name="target-size"]:checked').value;
-        
-        // Target types
-        this.sessionConfig.targetTypes.static = document.getElementById('target-static').checked;
-        this.sessionConfig.targetTypes.moving = document.getElementById('target-moving').checked;
-        this.sessionConfig.targetTypes.flee = document.getElementById('target-flee').checked;
-        this.sessionConfig.targetTypes.bonus = document.getElementById('target-bonus').checked;
         
         // Player settings
         this.sessionConfig.playerSpeed = parseInt(document.getElementById('player-speed').value);
@@ -1619,7 +1522,6 @@ class DirectionalSkillsGame {
         // Input methods
         this.sessionConfig.inputMethods.keyboard = document.getElementById('input-keyboard').checked;
         this.sessionConfig.inputMethods.mouseClick = document.getElementById('input-mouse-click').checked;
-        this.sessionConfig.inputMethods.mouseDrag = document.getElementById('input-mouse-drag').checked;
         this.sessionConfig.inputBuffer = parseInt(document.getElementById('input-buffer').value);
         
         // Environment
@@ -1675,48 +1577,44 @@ class DirectionalSkillsGame {
         
         const presets = {
             'first-steps': {
-                targetCount: 1,
+                targetCounts: { static: 1, moving: 0, flee: 0, bonus: 0 },
                 targetSize: 'extra-large',
-                targetTypes: { static: true, moving: false, flee: false, bonus: false },
                 playerSpeed: 1,
                 playerTrail: 'short',
-                inputMethods: { keyboard: true, mouseClick: false, mouseDrag: false },
+                inputMethods: { keyboard: true, mouseClick: false },
                 inputBuffer: 500,
                 boundaries: 'none',
                 feedback: { audio: true, visual: true, haptic: false }
             },
             'building-confidence': {
-                targetCount: 3,
+                targetCounts: { static: 3, moving: 0, flee: 0, bonus: 0 },
                 targetSize: 'large',
-                targetTypes: { static: true, moving: false, flee: false, bonus: false },
                 playerSpeed: 2,
                 playerTrail: 'short',
-                inputMethods: { keyboard: true, mouseClick: true, mouseDrag: false },
+                inputMethods: { keyboard: true, mouseClick: true },
                 inputBuffer: 400,
                 boundaries: 'visual',
                 feedback: { audio: true, visual: true, haptic: false }
             },
             'precision-practice': {
-                targetCount: 5,
+                targetCounts: { static: 4, moving: 0, flee: 0, bonus: 1 },
                 targetSize: 'medium',
-                targetTypes: { static: true, moving: false, flee: false, bonus: true },
                 playerSpeed: 3,
                 playerTrail: 'short',
-                inputMethods: { keyboard: true, mouseClick: true, mouseDrag: false },
+                inputMethods: { keyboard: true, mouseClick: true },
                 inputBuffer: 300,
                 boundaries: 'visual',
                 feedback: { audio: true, visual: true, haptic: false }
             },
             'dynamic-challenge': {
-                targetCount: 3,
+                targetCounts: { static: 1, moving: 1, flee: 1, bonus: 1 },
                 targetSize: 'medium',
-                targetTypes: { static: true, moving: true, flee: true, bonus: true },
                 playerSpeed: 3,
                 playerTrail: 'long',
-                inputMethods: { keyboard: true, mouseClick: true, mouseDrag: true },
+                inputMethods: { keyboard: true, mouseClick: true },
                 inputBuffer: 200,
                 boundaries: 'visual',
-                feedback: { audio: true, visual: true, haptic: true }
+                feedback: { audio: true, visual: true, haptic: false }
             }
         };
         

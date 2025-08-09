@@ -478,9 +478,6 @@ html, body {
     font-style: italic;
     padding: 24px;
 }
-    gap: 16px;
-    margin-bottom: 24px;
-}
 
 .stat-card {
     background: var(--bg-color);
@@ -606,6 +603,48 @@ html, body {
     font-weight: 600;
     color: var(--primary-color);
     margin-left: 12px;
+}
+
+/* Target Slider Styles */
+.target-sliders {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.target-slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.target-slider-group label {
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 0;
+}
+
+.target-slider-group .input-with-value {
+    margin-bottom: 4px;
+}
+
+.target-slider-group .field-help {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-light);
+}
+
+.total-targets {
+    padding: 12px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 6px;
+    text-align: center;
+    margin-top: 8px;
 }
 
 .modal-footer {
