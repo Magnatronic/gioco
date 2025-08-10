@@ -55,7 +55,11 @@ class DirectionalSkillsGame {
             pauseStartTime: null,
             targetsCollected: 0,
             totalTargets: 0,
-            completed: false
+            coreTargetsCollected: 0, // Track core targets separately
+            bonusTargetsCollected: 0, // Track bonus targets
+            hazardTargetsHit: 0, // Track hazard targets hit
+            completed: false,
+            timeAdjustments: 0 // Track bonus/penalty time adjustments
         };
         
         // Session history (last 10 attempts)
@@ -160,7 +164,11 @@ class DirectionalSkillsGame {
             pauseStartTime: null,
             targetsCollected: 0,
             totalTargets: this.sessionConfig.targetCount,
-            completed: false
+            coreTargetsCollected: 0, // Track core targets separately
+            bonusTargetsCollected: 0, // Track bonus targets
+            hazardTargetsHit: 0, // Track hazard targets hit
+            completed: false,
+            timeAdjustments: 0 // Track bonus/penalty time adjustments
         };
         
         // Set seed for reproducible random generation
@@ -207,7 +215,8 @@ class DirectionalSkillsGame {
         
         const endTime = this.currentSession.endTime || Date.now();
         const totalTime = endTime - this.currentSession.startTime;
-        return totalTime - this.currentSession.pausedTime;
+        const adjustedTime = totalTime - this.currentSession.pausedTime + (this.currentSession.timeAdjustments * 1000);
+        return Math.max(0, adjustedTime); // Ensure time can't go negative
     }
     
     formatTime(milliseconds) {
@@ -274,6 +283,9 @@ class DirectionalSkillsGame {
         }
         
         this.currentSession.totalTargets = totalTargets;
+        
+        // Update player size to match target size for visual consistency
+        this.player.size = targetSize;
         
         // Calculate total core targets (static, moving, flee) for progress tracking
         this.currentSession.totalCoreTargets = (this.sessionConfig.targetCounts.stationary || 0) + 
@@ -661,11 +673,22 @@ class DirectionalSkillsGame {
     checkCollisions() {
         for (let i = this.targets.length - 1; i >= 0; i--) {
             const target = this.targets[i];
-            const dx = this.player.x - target.x;
-            const dy = this.player.y - target.y;
+            
+            // Square player (centered at player.x, player.y with size player.size)
+            // vs circular target (centered at target.x, target.y with radius target.size)
+            
+            // Find the closest point on the square to the circle center
+            const closestX = Math.max(this.player.x - this.player.size, 
+                                     Math.min(target.x, this.player.x + this.player.size));
+            const closestY = Math.max(this.player.y - this.player.size, 
+                                     Math.min(target.y, this.player.y + this.player.size));
+            
+            // Calculate distance from circle center to closest point on square
+            const dx = target.x - closestX;
+            const dy = target.y - closestY;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            if (distance < this.player.size + target.size) {
+            if (distance < target.size) {
                 if (target.type === 'hazard') {
                     this.handleHazardCollision(target, i);
                 } else {
@@ -685,12 +708,16 @@ class DirectionalSkillsGame {
         if (target.type === 'bonus') {
             // Bonus targets reduce time (reward)
             const timeReduction = target.timeBonus || 5;
-            this.currentSession.timeElapsed = Math.max(0, this.currentSession.timeElapsed - timeReduction);
+            this.currentSession.timeAdjustments -= timeReduction;
+            this.currentSession.bonusTargetsCollected++;
+            this.currentSession.targetsCollected++; // Count toward total collected
+            console.log(`Bonus target collected! Time reduced by ${timeReduction} seconds`);
             this.showBonusEffect(timeReduction);
             this.announceToScreenReader(`Bonus collected! Time reduced by ${timeReduction} seconds.`);
         } else {
-            // Regular targets just count toward completion
-            this.currentSession.targetsCollected++;
+            // Regular core targets (static, moving, flee) count toward completion
+            this.currentSession.coreTargetsCollected++;
+            this.currentSession.targetsCollected++; // Count toward total collected
             this.announceToScreenReader(`Target collected! Progress toward completion.`);
         }
         
@@ -710,7 +737,9 @@ class DirectionalSkillsGame {
     handleHazardCollision(target, index) {
         // Apply time penalty
         const penalty = target.timePenalty || 5;
-        this.currentSession.timeElapsed += penalty;
+        this.currentSession.timeAdjustments += penalty;
+        this.currentSession.hazardTargetsHit++;
+        console.log(`Hazard hit! Time penalty: ${penalty} seconds`);
         
         // Remove the hazard target (one-time penalty)
         this.targets.splice(index, 1);
@@ -856,7 +885,6 @@ class DirectionalSkillsGame {
                 return {
                     ...baseTarget,
                     color: '#f39c12', // Gold - valuable reward feeling
-                    pulsePhase: seed !== null ? this.seededRandom(seed + 300) * Math.PI * 2 : Math.random() * Math.PI * 2,
                     bonusMultiplier: 2,
                     timeBonus: 5 // 5 seconds time reduction
                 };
@@ -867,7 +895,6 @@ class DirectionalSkillsGame {
                     color: '#e74c3c', // Red - universal danger color
                     collectible: false, // Cannot be collected for points
                     timePenalty: 5, // 5 second time penalty
-                    pulsePhase: seed !== null ? this.seededRandom(seed + 400) * Math.PI * 2 : Math.random() * Math.PI * 2,
                     hazardEffect: 'warning' // Visual warning effect
                 };
                 
@@ -958,19 +985,11 @@ class DirectionalSkillsGame {
     }
 
     updateBonusTarget(target, currentTime) {
-        // Update pulse animation
-        target.pulsePhase += 0.1;
-        if (target.pulsePhase > Math.PI * 2) {
-            target.pulsePhase -= Math.PI * 2;
-        }
+        // No pulse animation updates needed - bonus targets are now static
     }
 
     updateHazardTarget(target, currentTime) {
-        // Update warning pulse animation (faster than bonus)
-        target.pulsePhase += 0.15; // Faster pulse to indicate danger
-        if (target.pulsePhase > Math.PI * 2) {
-            target.pulsePhase -= Math.PI * 2;
-        }
+        // No pulse animation updates needed - hazard targets are now static
     }
     
     getLevelConfig(level) {
@@ -1229,21 +1248,110 @@ class DirectionalSkillsGame {
     }
     
     drawPlayer() {
-        this.ctx.fillStyle = this.player.color;
-        this.ctx.beginPath();
-        this.ctx.arc(this.player.x, this.player.y, this.player.size, 0, Math.PI * 2);
-        this.ctx.fill();
+        // Draw player as a rounded rectangle to distinguish from circular targets
+        const size = this.player.size;
+        const cornerRadius = size * 0.3; // Rounded corners
         
-        // Draw direction indicator
+        // Add a subtle glow effect for better visibility
+        this.ctx.shadowColor = '#ffffff';
+        this.ctx.shadowBlur = 8;
+        
+        // Draw player border for enhanced visibility
+        this.ctx.strokeStyle = '#ffffff';
+        this.ctx.lineWidth = 3;
+        this.drawRoundedRect(this.player.x - size, this.player.y - size, size * 2, size * 2, cornerRadius, false, true);
+        
+        // Draw main player rounded rectangle
+        this.ctx.fillStyle = this.player.color;
+        this.drawRoundedRect(this.player.x - size, this.player.y - size, size * 2, size * 2, cornerRadius, true, false);
+        
+        // Reset shadow effects
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowColor = 'transparent';
+        
+        // Draw direction indicator with simple, thick arrow
         if (this.lastDirection) {
-            this.ctx.fillStyle = 'white';
-            this.ctx.font = 'bold 14px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
+            // Draw custom thick arrow shape
+            this.ctx.fillStyle = '#000000'; // Black arrow
+            this.ctx.strokeStyle = '#ffffff'; // White outline for visibility
+            this.ctx.lineWidth = 1;
             
-            const arrows = { up: '↑', down: '↓', left: '←', right: '→' };
-            this.ctx.fillText(arrows[this.lastDirection], this.player.x, this.player.y);
+            const arrowSize = size * 0.5;
+            this.drawCustomArrow(this.player.x, this.player.y, arrowSize, this.lastDirection);
         }
+    }
+    
+    drawRoundedRect(x, y, width, height, radius, fill, stroke) {
+        this.ctx.beginPath();
+        this.ctx.moveTo(x + radius, y);
+        this.ctx.lineTo(x + width - radius, y);
+        this.ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        this.ctx.lineTo(x + width, y + height - radius);
+        this.ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        this.ctx.lineTo(x + radius, y + height);
+        this.ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        this.ctx.lineTo(x, y + radius);
+        this.ctx.quadraticCurveTo(x, y, x + radius, y);
+        this.ctx.closePath();
+        
+        if (fill) {
+            this.ctx.fill();
+        }
+        if (stroke) {
+            this.ctx.stroke();
+        }
+    }
+    
+    drawCustomArrow(x, y, size, direction) {
+        this.ctx.beginPath();
+        
+        switch (direction) {
+            case 'up':
+                this.ctx.moveTo(x, y - size);           // Top point
+                this.ctx.lineTo(x - size * 0.6, y + size * 0.2); // Bottom left
+                this.ctx.lineTo(x - size * 0.25, y + size * 0.2); // Inner left
+                this.ctx.lineTo(x - size * 0.25, y + size); // Stem left
+                this.ctx.lineTo(x + size * 0.25, y + size); // Stem right
+                this.ctx.lineTo(x + size * 0.25, y + size * 0.2); // Inner right
+                this.ctx.lineTo(x + size * 0.6, y + size * 0.2); // Bottom right
+                break;
+                
+            case 'down':
+                this.ctx.moveTo(x, y + size);           // Bottom point
+                this.ctx.lineTo(x - size * 0.6, y - size * 0.2); // Top left
+                this.ctx.lineTo(x - size * 0.25, y - size * 0.2); // Inner left
+                this.ctx.lineTo(x - size * 0.25, y - size); // Stem left
+                this.ctx.lineTo(x + size * 0.25, y - size); // Stem right
+                this.ctx.lineTo(x + size * 0.25, y - size * 0.2); // Inner right
+                this.ctx.lineTo(x + size * 0.6, y - size * 0.2); // Top right
+                break;
+                
+            case 'left':
+                this.ctx.moveTo(x - size, y);           // Left point
+                this.ctx.lineTo(x + size * 0.2, y - size * 0.6); // Top right
+                this.ctx.lineTo(x + size * 0.2, y - size * 0.25); // Inner top
+                this.ctx.lineTo(x + size, y - size * 0.25); // Stem top
+                this.ctx.lineTo(x + size, y + size * 0.25); // Stem bottom
+                this.ctx.lineTo(x + size * 0.2, y + size * 0.25); // Inner bottom
+                this.ctx.lineTo(x + size * 0.2, y + size * 0.6); // Bottom right
+                break;
+                
+            case 'right':
+                this.ctx.moveTo(x + size, y);           // Right point
+                this.ctx.lineTo(x - size * 0.2, y - size * 0.6); // Top left
+                this.ctx.lineTo(x - size * 0.2, y - size * 0.25); // Inner top
+                this.ctx.lineTo(x - size, y - size * 0.25); // Stem top
+                this.ctx.lineTo(x - size, y + size * 0.25); // Stem bottom
+                this.ctx.lineTo(x - size * 0.2, y + size * 0.25); // Inner bottom
+                this.ctx.lineTo(x - size * 0.2, y + size * 0.6); // Bottom left
+                break;
+        }
+        
+        this.ctx.closePath();
+        
+        // Draw arrow with subtle white outline for visibility
+        this.ctx.stroke();
+        this.ctx.fill();
     }
     
     drawTargets() {
@@ -1253,121 +1361,197 @@ class DirectionalSkillsGame {
     }
 
     drawSingleTarget(target) {
-        // Base rendering for all targets
-        let pulseScale = 1;
-        let size = target.size;
+        // Draw targets with distinct shapes based on type
+        let size = target.size; // No pulsing - consistent size
         
-        // Apply special effects based on target type
+        // Apply special effects based on target type (non-animated)
         switch (target.type) {
             case 'bonus':
-                // Bonus targets pulse more dramatically
-                pulseScale = 1 + Math.sin(target.pulsePhase) * 0.3;
-                size = target.size * pulseScale;
+                // Draw rounded star shape (no glow - clean style like other targets)
+                this.drawRoundedStar(target.x, target.y, size, target.color);
+                break;
                 
-                // Draw bonus glow effect
-                this.ctx.shadowColor = target.color;
-                this.ctx.shadowBlur = 15;
+            case 'hazard':
+                // Draw rounded triangle shape (no glow - clean style like other targets)
+                this.drawRoundedTriangle(target.x, target.y, size, target.color);
                 break;
                 
             case 'flee':
-                // Flee targets have a subtle warning pulse
-                pulseScale = 1 + Math.sin(Date.now() * 0.005) * 0.15;
-                size = target.size * pulseScale;
-                
-                // Draw detection radius when player is close
+                // Draw detection radius when player is close (static)
                 const dx = this.player.x - target.x;
                 const dy = this.player.y - target.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 if (distance < target.detectionRadius) {
-                    this.ctx.strokeStyle = 'rgba(243, 156, 18, 0.3)';
+                    this.ctx.strokeStyle = 'rgba(155, 89, 182, 0.3)';
                     this.ctx.lineWidth = 2;
                     this.ctx.beginPath();
                     this.ctx.arc(target.x, target.y, target.detectionRadius, 0, Math.PI * 2);
                     this.ctx.stroke();
                 }
+                // Draw circular target (keep circles for core targets)
+                this.drawCircularTarget(target.x, target.y, size, target.color);
                 break;
                 
             case 'moving':
-                // Moving targets have a subtle trail effect
-                pulseScale = 1 + Math.sin(Date.now() * 0.004) * 0.1;
-                size = target.size * pulseScale;
-                break;
-                
-            case 'hazard':
-                // Hazard targets pulse urgently with warning glow
-                pulseScale = 1 + Math.sin(target.pulsePhase) * 0.4;
-                size = target.size * pulseScale;
-                
-                // Draw warning glow effect
-                this.ctx.shadowColor = '#e74c3c';
-                this.ctx.shadowBlur = 20;
-                
-                // Add flashing border for extra visibility
-                if (Math.sin(target.pulsePhase * 2) > 0) {
-                    this.ctx.strokeStyle = '#ffffff';
-                    this.ctx.lineWidth = 3;
-                    this.ctx.beginPath();
-                    this.ctx.arc(target.x, target.y, size + 5, 0, Math.PI * 2);
-                    this.ctx.stroke();
-                }
-                break;
-                
+            case 'static':
             default:
-                // Static targets with gentle pulse
-                pulseScale = 1 + Math.sin(Date.now() * 0.003) * 0.1;
-                size = target.size * pulseScale;
+                // Draw circular target (keep circles for core targets)
+                this.drawCircularTarget(target.x, target.y, size, target.color);
                 break;
         }
         
-        // Draw main target circle
-        this.ctx.fillStyle = target.color;
-        this.ctx.beginPath();
-        this.ctx.arc(target.x, target.y, size, 0, Math.PI * 2);
-        this.ctx.fill();
-        
-        // Draw target center
-        this.ctx.fillStyle = 'white';
-        this.ctx.beginPath();
-        this.ctx.arc(target.x, target.y, size * 0.4, 0, Math.PI * 2);
-        this.ctx.fill();
-        
-        // Add type indicator
-        if (target.type !== 'static') {
-            this.drawTargetTypeIndicator(target, size);
-        }
+        // Add type indicator for moving and flee targets only
+        // Removed - using pure solid shapes for therapeutic simplicity
         
         // Reset shadow effects
         this.ctx.shadowBlur = 0;
     }
 
     drawTargetTypeIndicator(target, size) {
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = `${size * 0.6}px Arial`;
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        
-        let indicator = '';
-        switch (target.type) {
-            case 'bonus':
-                indicator = '★';
-                break;
-            case 'moving':
-                indicator = '→';
-                break;
-            case 'flee':
-                indicator = '!';
-                break;
-            case 'hazard':
-                indicator = '⚠';
-                break;
-        }
-        
-        if (indicator) {
-            this.ctx.fillText(indicator, target.x, target.y);
-        }
+        // Removed - using pure solid shapes without any text symbols
+        // This provides better therapeutic design and cognitive simplicity
     }
-    
+
+    // Helper function to draw circular targets (core targets)
+    drawCircularTarget(x, y, size, color) {
+        // Draw light fill with thick outline - therapeutic and visible
+        
+        // Light transparent fill
+        this.ctx.fillStyle = color.replace('rgb', 'rgba').replace(')', ', 0.2)');
+        // Fallback for hex colors
+        if (color.startsWith('#')) {
+            const r = parseInt(color.slice(1, 3), 16);
+            const g = parseInt(color.slice(3, 5), 16);
+            const b = parseInt(color.slice(5, 7), 16);
+            this.ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
+        }
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, size, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Thick colored outline for visibility
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = 4;
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, size, 0, Math.PI * 2);
+        this.ctx.stroke();
+    }
+
+    // Custom shape: Star inside circle for bonus targets
+    drawRoundedStar(x, y, size, color) {
+        const ctx = this.ctx;
+        
+        // Draw circular background with transparent fill like other targets
+        const r = parseInt(color.slice(1, 3), 16);
+        const g = parseInt(color.slice(3, 5), 16);
+        const b = parseInt(color.slice(5, 7), 16);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw thick circular outline
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        const spikes = 6; // 6-pointed star for bonus
+        const outerRadius = size * 0.7; // Scale to fit nicely in circle
+        const innerRadius = size * 0.4; // Adjusted for better proportions
+        
+        // Create smooth star shape using bezier curves
+        const points = [];
+        for (let i = 0; i < spikes * 2; i++) {
+            const angle = (i * Math.PI) / spikes - Math.PI / 2; // Start from top
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            points.push({
+                x: x + Math.cos(angle) * radius,
+                y: y + Math.sin(angle) * radius
+            });
+        }
+        
+        // Draw solid star shape inside the circle
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        
+        for (let i = 1; i < points.length; i++) {
+            const current = points[i];
+            const next = points[(i + 1) % points.length];
+            
+            // Create control points for smooth curves
+            const controlDistance = size * 0.07;
+            const angle1 = Math.atan2(current.y - y, current.x - x);
+            const angle2 = Math.atan2(next.y - y, next.x - x);
+            
+            const cp1x = current.x - Math.cos(angle1) * controlDistance;
+            const cp1y = current.y - Math.sin(angle1) * controlDistance;
+            const cp2x = next.x - Math.cos(angle2) * controlDistance;
+            const cp2y = next.y - Math.sin(angle2) * controlDistance;
+            
+            ctx.quadraticCurveTo(cp1x, cp1y, current.x, current.y);
+            if (i === points.length - 1) {
+                ctx.quadraticCurveTo(cp2x, cp2y, points[0].x, points[0].y);
+            }
+        }
+        
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Custom shape: Triangle inside circle for hazard targets
+    drawRoundedTriangle(x, y, size, color) {
+        const ctx = this.ctx;
+        
+        // Draw circular background with transparent fill like other targets
+        const r = parseInt(color.slice(1, 3), 16);
+        const g = parseInt(color.slice(3, 5), 16);
+        const b = parseInt(color.slice(5, 7), 16);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.2)`;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw thick circular outline
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Draw triangle that fits nicely inside the circle
+        const triangleSize = size * 0.8; // Use most of the circle
+        const height = triangleSize * 1.2;
+        const width = triangleSize * 1.4;
+        const cornerRadius = size * 0.08; // Smaller radius for larger triangle
+        
+        // Calculate triangle points (pointing up - warning sign style)
+        const top = { x: x, y: y - height * 0.5 };
+        const bottomLeft = { x: x - width * 0.5, y: y + height * 0.5 };
+        const bottomRight = { x: x + width * 0.5, y: y + height * 0.5 };
+        
+        // Draw solid triangle inside the circle
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        
+        // Start from top point, moving clockwise
+        ctx.moveTo(top.x - cornerRadius, top.y);
+        
+        // Top to bottom-right with rounded corner
+        ctx.arcTo(top.x, top.y, bottomRight.x, bottomRight.y, cornerRadius);
+        ctx.arcTo(bottomRight.x, bottomRight.y, bottomLeft.x, bottomLeft.y, cornerRadius);
+        
+        // Bottom edge to bottom-left with rounded corner
+        ctx.arcTo(bottomLeft.x, bottomLeft.y, top.x, top.y, cornerRadius);
+        
+        // Close back to top
+        ctx.closePath();
+        ctx.fill();
+    }
+
     drawPauseOverlay() {
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -1401,10 +1585,16 @@ class DirectionalSkillsGame {
         if (this.currentSession && this.currentSession.startTime) {
             const sessionTime = this.calculateSessionTime();
             document.getElementById('current-session-time').textContent = this.formatTime(sessionTime);
+        } else {
+            // Show 00:00 when session hasn't started
+            document.getElementById('current-session-time').textContent = '00:00';
         }
     }
     
     updateUI() {
+        // Update timer display
+        this.updateTimerDisplay();
+        
         // Update progress bar - only count core targets for progress
         const coreTargets = this.targets.filter(t => ['static', 'moving', 'flee'].includes(t.type));
         const coreTargetsCollected = this.currentSession.totalCoreTargets - coreTargets.length;
@@ -1698,10 +1888,15 @@ class DirectionalSkillsGame {
         
         // Update results display
         document.getElementById('results-time').textContent = this.formatTime(this.currentSession.totalTime);
-        document.getElementById('results-targets').textContent = this.currentSession.targetsCollected;
+        document.getElementById('results-core-targets').textContent = this.currentSession.coreTargetsCollected;
+        document.getElementById('results-bonus-targets').textContent = this.currentSession.bonusTargetsCollected;
+        document.getElementById('results-hazard-targets').textContent = this.currentSession.hazardTargetsHit;
         document.getElementById('results-seed').textContent = this.currentSession.seed;
-        document.getElementById('results-completion').textContent = 
-            `${Math.round((this.currentSession.targetsCollected / this.currentSession.totalTargets) * 100)}%`;
+        
+        // Calculate completion percentage based only on core targets
+        const coreCompletion = this.currentSession.totalCoreTargets > 0 ? 
+            (this.currentSession.coreTargetsCollected / this.currentSession.totalCoreTargets) * 100 : 100;
+        document.getElementById('results-completion').textContent = `${Math.round(coreCompletion)}%`;
         
         // Update session history display
         this.updateSessionHistoryDisplay();
