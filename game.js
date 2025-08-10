@@ -31,10 +31,7 @@ class DirectionalSkillsGame {
             targetSize: 'medium', // 'small', 'medium', 'large', 'extra-large'
             playerSpeed: 3,
             playerTrail: 'short', // 'off', 'short', 'long'
-            inputMethods: {
-                keyboard: true,
-                mouseClick: true
-            },
+            inputMethod: 'discrete', // 'discrete', 'continuous', 'mouse'
             inputBuffer: 300,
             boundaries: 'none', // 'none', 'visual', 'hard'
             feedback: {
@@ -73,7 +70,9 @@ class DirectionalSkillsGame {
             color: '#3498db',
             trail: [],
             targetX: null,
-            targetY: null
+            targetY: null,
+            continuousDirection: null, // For continuous movement mode
+            isMoving: false // For continuous movement mode
         };
         
         // Targets array
@@ -97,14 +96,25 @@ class DirectionalSkillsGame {
         this.setupEventListeners();
         this.setupAccessibility();
         
-        // Initialize session
+        // Initialize session but don't start
         this.initializeNewSession();
+        
+        // Start with main menu visible
+        this.showMainMenu();
         
         // Start game loop
         this.gameLoop();
         
         // Update UI
         this.updateUI();
+        this.updateSoundButton();
+    }
+    
+    showMainMenu() {
+        // Show main menu and hide game interface
+        document.getElementById('main-menu').style.display = 'flex';
+        document.getElementById('game-interface').style.display = 'none';
+        this.gameState = 'menu';
     }
     
     // Session Management Methods
@@ -443,14 +453,15 @@ class DirectionalSkillsGame {
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         document.addEventListener('keyup', (e) => this.handleKeyUp(e));
         
-        // Menu button events
-        document.getElementById('play-pause-btn').addEventListener('click', () => this.togglePlayPause());
-        document.getElementById('session-btn').addEventListener('click', () => this.openSessionSetup());
-        document.getElementById('settings-btn').addEventListener('click', () => this.openSettings());
-        document.getElementById('stats-btn').addEventListener('click', () => this.openStats());
-        document.getElementById('help-btn').addEventListener('click', () => this.openHelp());
-        document.getElementById('sound-btn').addEventListener('click', () => this.toggleSound());
-        document.getElementById('fullscreen-btn').addEventListener('click', () => this.toggleFullscreen());
+        // Main menu card events
+        document.getElementById('start-practice-btn').addEventListener('click', () => this.startQuickPractice());
+        document.getElementById('configure-session-btn').addEventListener('click', () => this.openSessionSetup());
+        document.getElementById('progress-history-btn').addEventListener('click', () => this.openStats());
+        document.getElementById('help-support-btn').addEventListener('click', () => this.openHelp());
+        
+        // Secondary menu events
+        document.getElementById('sound-toggle-btn').addEventListener('click', () => this.toggleSound());
+        document.getElementById('fullscreen-toggle-btn').addEventListener('click', () => this.toggleFullscreen());
         
         // Modal events
         this.setupModalEvents();
@@ -484,16 +495,28 @@ class DirectionalSkillsGame {
         const helpClose = helpModal.querySelector('.modal-close');
         const closeHelp = document.getElementById('close-help');
         
-        helpClose.addEventListener('click', () => helpModal.close());
-        closeHelp.addEventListener('click', () => helpModal.close());
+        helpClose.addEventListener('click', () => {
+            helpModal.close();
+            if (this.gameState === 'menu') this.showMainMenu();
+        });
+        closeHelp.addEventListener('click', () => {
+            helpModal.close();
+            if (this.gameState === 'menu') this.showMainMenu();
+        });
         
         // Stats modal
         const statsModal = document.getElementById('stats-modal');
         const statsClose = statsModal.querySelector('.modal-close');
         const closeStats = document.getElementById('close-stats');
         
-        statsClose.addEventListener('click', () => statsModal.close());
-        closeStats.addEventListener('click', () => statsModal.close());
+        statsClose.addEventListener('click', () => {
+            statsModal.close();
+            if (this.gameState === 'menu') this.showMainMenu();
+        });
+        closeStats.addEventListener('click', () => {
+            statsModal.close();
+            if (this.gameState === 'menu') this.showMainMenu();
+        });
         
         // Session modal
         const sessionModal = document.getElementById('session-modal');
@@ -516,7 +539,10 @@ class DirectionalSkillsGame {
         const newSession = document.getElementById('new-session');
         const closeResults = document.getElementById('close-results');
         
-        resultsClose.addEventListener('click', () => resultsModal.close());
+        resultsClose.addEventListener('click', () => {
+            resultsModal.close();
+            this.returnToMainMenu();
+        });
         replayGame.addEventListener('click', () => {
             resultsModal.close();
             // Restart the game with the same replay code
@@ -527,13 +553,31 @@ class DirectionalSkillsGame {
             resultsModal.close();
             this.openSessionSetup();
         });
-        closeResults.addEventListener('click', () => resultsModal.close());
+        closeResults.addEventListener('click', () => {
+            resultsModal.close();
+            this.returnToMainMenu();
+        });
+        
+        // Pause modal
+        const pauseModal = document.getElementById('pause-modal');
+        const resumeSessionBtn = document.getElementById('resume-session-btn');
+        const quitSessionBtn = document.getElementById('quit-session-btn');
+        
+        resumeSessionBtn.addEventListener('click', () => {
+            this.hidePauseModal();
+            this.resumeGame();
+        });
+        
+        quitSessionBtn.addEventListener('click', () => {
+            this.hidePauseModal();
+            this.returnToMainMenu();
+        });
         
         // Setup session form interactivity
         this.setupSessionFormEvents();
         
         // Close modals on backdrop click
-        [settingsModal, helpModal, statsModal, sessionModal, resultsModal].forEach(modal => {
+        [settingsModal, helpModal, statsModal, sessionModal, resultsModal, pauseModal].forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) modal.close();
             });
@@ -549,10 +593,28 @@ class DirectionalSkillsGame {
     }
     
     setupMouseEvents() {
+        // Remove any existing mouse event listeners first
+        this.removeMouseEvents();
+        
         // Basic mouse event setup for click-to-move
-        if (this.sessionConfig.inputMethods.mouseClick) {
-            this.canvas.addEventListener('click', (e) => this.handleMouseClick(e));
+        if (this.sessionConfig.inputMethod === 'mouse') {
+            this.mouseClickHandler = (e) => this.handleMouseClick(e);
+            this.canvas.addEventListener('click', this.mouseClickHandler);
             this.setCursor('crosshair');
+        } else {
+            this.setCursor('default');
+            // Clear any existing mouse target when mouse click is disabled
+            if (this.player) {
+                this.player.targetX = null;
+                this.player.targetY = null;
+            }
+        }
+    }
+    
+    removeMouseEvents() {
+        if (this.mouseClickHandler) {
+            this.canvas.removeEventListener('click', this.mouseClickHandler);
+            this.mouseClickHandler = null;
         }
     }
     
@@ -563,12 +625,34 @@ class DirectionalSkillsGame {
         switch(e.code) {
             case 'Space':
                 e.preventDefault();
-                this.togglePlayPause();
+                // Check if pause modal is open
+                const pauseModal = document.getElementById('pause-modal');
+                if (pauseModal && pauseModal.open) {
+                    // Space resumes from pause modal
+                    this.hidePauseModal();
+                    this.resumeGame();
+                } else {
+                    this.togglePlayPause();
+                }
                 break;
             case 'Escape':
                 e.preventDefault();
-                if (this.gameState === 'playing') {
+                // Check if pause modal is open
+                const pauseModalForEsc = document.getElementById('pause-modal');
+                if (pauseModalForEsc && pauseModalForEsc.open) {
+                    // ESC quits from pause modal
+                    this.hidePauseModal();
+                    this.returnToMainMenu();
+                } else if (this.gameState === 'playing') {
                     this.pauseGame();
+                    // Show pause modal after a short delay
+                    setTimeout(() => {
+                        this.showPauseModal();
+                    }, 100);
+                } else if (this.gameState === 'paused') {
+                    this.showPauseModal();
+                } else if (this.gameState === 'menu') {
+                    // Already in menu, ESC does nothing
                 }
                 break;
             case 'F1':
@@ -605,8 +689,31 @@ class DirectionalSkillsGame {
         
         const direction = movementKeys[keyCode];
         if (direction) {
-            this.movePlayer(direction);
+            if (this.sessionConfig.inputMethod === 'continuous') {
+                // Continuous movement: single press changes direction
+                this.setContinuousDirection(direction);
+            } else if (this.sessionConfig.inputMethod === 'discrete') {
+                // Discrete movement: traditional press-and-hold (handled in updateDiscreteMovement)
+                // We don't need to do anything here since discrete movement 
+                // is handled continuously in the update loop
+            }
+            // Mouse mode ignores keyboard input
         }
+    }
+    
+    setContinuousDirection(direction) {
+        // Clear any mouse targets when switching to continuous movement
+        this.player.targetX = null;
+        this.player.targetY = null;
+        
+        // Set new direction
+        this.player.continuousDirection = direction;
+        this.player.isMoving = true;
+        
+        // Play movement sound
+        if (this.sounds.move) this.sounds.move();
+        
+        this.announceToScreenReader(`Moving ${direction} continuously`);
     }
     
     movePlayer(direction) {
@@ -654,7 +761,7 @@ class DirectionalSkillsGame {
 
     // Mouse Input Handlers
     handleMouseClick(e) {
-        if (!this.sessionConfig.inputMethods.mouseClick || this.gameState !== 'playing') return;
+        if (this.sessionConfig.inputMethod !== 'mouse' || this.gameState !== 'playing') return;
         
         const rect = this.canvas.getBoundingClientRect();
         const targetX = e.clientX - rect.left;
@@ -1156,8 +1263,12 @@ class DirectionalSkillsGame {
             currentTime - point.timestamp < 2000
         );
         
-        // Handle click-to-move
-        if (this.player.targetX !== null && this.player.targetY !== null) {
+        // Handle different input methods
+        if (this.sessionConfig.inputMethod === 'continuous') {
+            this.updateContinuousMovement();
+        } else if (this.sessionConfig.inputMethod === 'discrete') {
+            this.updateDiscreteMovement();
+        } else if (this.sessionConfig.inputMethod === 'mouse') {
             this.updateClickToMove();
         }
         
@@ -1168,7 +1279,12 @@ class DirectionalSkillsGame {
     }
 
     updateClickToMove() {
-        const speed = this.settings.movementSpeed * 1.5; // Slightly slower for precision
+        // Only move if we have a valid target
+        if (this.player.targetX === null || this.player.targetY === null) {
+            return;
+        }
+        
+        const speed = this.sessionConfig.playerSpeed * 2; // Consistent with other movement methods
         const dx = this.player.targetX - this.player.x;
         const dy = this.player.targetY - this.player.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -1198,6 +1314,78 @@ class DirectionalSkillsGame {
             
             // Add to trail
             this.addToTrail(oldX, oldY);
+            this.checkCollisions();
+        }
+    }
+    
+    updateContinuousMovement() {
+        if (!this.player.isMoving || !this.player.continuousDirection) return;
+        
+        const speed = this.sessionConfig.playerSpeed * 2;
+        const oldX = this.player.x;
+        const oldY = this.player.y;
+        
+        switch (this.player.continuousDirection) {
+            case 'up':
+                this.player.y -= speed;
+                break;
+            case 'down':
+                this.player.y += speed;
+                break;
+            case 'left':
+                this.player.x -= speed;
+                break;
+            case 'right':
+                this.player.x += speed;
+                break;
+        }
+        
+        // Keep within bounds
+        this.player.x = Math.max(this.player.size, Math.min(this.canvas.width - this.player.size, this.player.x));
+        this.player.y = Math.max(this.player.size, Math.min(this.canvas.height - this.player.size, this.player.y));
+        
+        // Add to trail if player actually moved
+        if (oldX !== this.player.x || oldY !== this.player.y) {
+            this.addToTrail(oldX, oldY);
+        }
+        
+        this.checkCollisions();
+    }
+    
+    updateDiscreteMovement() {
+        // Handle traditional press-and-hold movement
+        const speed = this.sessionConfig.playerSpeed * 2;
+        const oldX = this.player.x;
+        const oldY = this.player.y;
+        let moved = false;
+        
+        if (this.keys['ArrowUp'] || this.keys['KeyW']) {
+            this.player.y -= speed;
+            moved = true;
+        }
+        if (this.keys['ArrowDown'] || this.keys['KeyS']) {
+            this.player.y += speed;
+            moved = true;
+        }
+        if (this.keys['ArrowLeft'] || this.keys['KeyA']) {
+            this.player.x -= speed;
+            moved = true;
+        }
+        if (this.keys['ArrowRight'] || this.keys['KeyD']) {
+            this.player.x += speed;
+            moved = true;
+        }
+        
+        if (moved) {
+            // Keep within bounds
+            this.player.x = Math.max(this.player.size, Math.min(this.canvas.width - this.player.size, this.player.x));
+            this.player.y = Math.max(this.player.size, Math.min(this.canvas.height - this.player.size, this.player.y));
+            
+            // Add to trail if player actually moved
+            if (oldX !== this.player.x || oldY !== this.player.y) {
+                this.addToTrail(oldX, oldY);
+            }
+            
             this.checkCollisions();
         }
     }
@@ -1657,17 +1845,6 @@ class DirectionalSkillsGame {
         }
     }
     
-    updatePlayPauseButton() {
-        const btn = document.getElementById('play-pause-btn');
-        if (this.gameState === 'playing') {
-            btn.className = 'menu-btn icon icon-pause active';
-            btn.setAttribute('aria-label', 'Pause game');
-        } else {
-            btn.className = 'menu-btn icon icon-play';
-            btn.setAttribute('aria-label', 'Play game');
-        }
-    }
-    
     // Modal Management
     openSettings() {
         this.pauseGame();
@@ -1716,14 +1893,23 @@ class DirectionalSkillsGame {
     }
     
     applySettings() {
-        // Update audio button
-        const soundBtn = document.getElementById('sound-btn');
-        if (this.settings.audioEnabled) {
-            soundBtn.className = 'menu-btn icon icon-sound';
-            soundBtn.setAttribute('aria-label', 'Mute sound');
-        } else {
-            soundBtn.className = 'menu-btn icon icon-mute';
-            soundBtn.setAttribute('aria-label', 'Enable sound');
+        // Update audio button - check both old and new button IDs for compatibility
+        const soundBtn = document.getElementById('sound-toggle-btn') || document.getElementById('sound-btn');
+        if (soundBtn) {
+            if (this.settings.audioEnabled) {
+                // Update for new Material Icons interface
+                const icon = soundBtn.querySelector('.material-icons');
+                const label = soundBtn.querySelector('.btn-label');
+                if (icon) icon.textContent = 'volume_up';
+                if (label) label.textContent = 'Sound On';
+                soundBtn.setAttribute('aria-label', 'Turn sound off');
+            } else {
+                const icon = soundBtn.querySelector('.material-icons');
+                const label = soundBtn.querySelector('.btn-label');
+                if (icon) icon.textContent = 'volume_off';
+                if (label) label.textContent = 'Sound Off';
+                soundBtn.setAttribute('aria-label', 'Turn sound on');
+            }
         }
         
         // Recreate audio context if needed
@@ -1771,9 +1957,8 @@ class DirectionalSkillsGame {
         this.updatePlayerSpeedLabel(this.sessionConfig.playerSpeed);
         document.querySelector(`input[name="player-trail"][value="${this.sessionConfig.playerTrail}"]`).checked = true;
         
-        // Input methods
-        document.getElementById('input-keyboard').checked = this.sessionConfig.inputMethods.keyboard;
-        document.getElementById('input-mouse-click').checked = this.sessionConfig.inputMethods.mouseClick;
+        // Input method - single exclusive choice
+        document.querySelector(`input[name="input-method"][value="${this.sessionConfig.inputMethod}"]`).checked = true;
         document.getElementById('input-buffer').value = this.sessionConfig.inputBuffer;
         document.getElementById('input-buffer-value').textContent = this.sessionConfig.inputBuffer + 'ms';
         
@@ -1844,6 +2029,9 @@ class DirectionalSkillsGame {
         // Close modal
         document.getElementById('session-modal').close();
         
+        // Show game interface
+        this.showGameInterface();
+        
         // Initialize new session with text seed (will be converted internally)
         const seed = this.sessionConfig.seed || null;
         this.initializeNewSession(seed);
@@ -1871,16 +2059,26 @@ class DirectionalSkillsGame {
         this.sessionConfig.playerSpeed = parseInt(document.getElementById('player-speed').value);
         this.sessionConfig.playerTrail = document.querySelector('input[name="player-trail"]:checked').value;
         
-        // Input methods
-        this.sessionConfig.inputMethods.keyboard = document.getElementById('input-keyboard').checked;
-        this.sessionConfig.inputMethods.mouseClick = document.getElementById('input-mouse-click').checked;
+        // Input method - single exclusive choice
+        this.sessionConfig.inputMethod = document.querySelector('input[name="input-method"]:checked').value;
         this.sessionConfig.inputBuffer = parseInt(document.getElementById('input-buffer').value);
+        
+        // Reset player movement state when input method changes
+        if (this.player) {
+            this.player.continuousDirection = null;
+            this.player.isMoving = false;
+            this.player.targetX = null;
+            this.player.targetY = null;
+        }
         
         // Environment
         this.sessionConfig.boundaries = document.querySelector('input[name="game-boundaries"]:checked').value;
         this.sessionConfig.feedback.audio = document.getElementById('feedback-audio').checked;
         this.sessionConfig.feedback.visual = document.getElementById('feedback-visual').checked;
         this.sessionConfig.feedback.haptic = document.getElementById('feedback-haptic').checked;
+        
+        // Update mouse events based on new configuration
+        this.setupMouseEvents();
     }
 
     showSessionResults() {
@@ -2016,6 +2214,7 @@ class DirectionalSkillsGame {
     toggleSound() {
         this.settings.audioEnabled = !this.settings.audioEnabled;
         this.applySettings();
+        this.updateSoundButton();
         localStorage.setItem('directionalSkillsSettings', JSON.stringify(this.settings));
     }
     
@@ -2034,6 +2233,131 @@ class DirectionalSkillsGame {
                 document.body.classList.remove('fullscreen');
                 this.handleResize();
             });
+        }
+    }
+    
+    // New UI Control Methods
+    startQuickPractice() {
+        // Start a quick practice session with default settings
+        this.initializeNewSession();
+        this.showGameInterface();
+        this.startSession();
+    }
+    
+    showGameInterface() {
+        // Hide main menu and show game interface
+        document.getElementById('main-menu').style.display = 'none';
+        document.getElementById('game-interface').style.display = 'flex';
+        
+        // Ensure canvas is properly sized with a small delay to allow layout
+        setTimeout(() => {
+            this.setupCanvas();
+            // Regenerate targets after canvas is properly sized
+            this.generateSessionTargets();
+        }, 50);
+        
+        // Focus canvas for keyboard input
+        setTimeout(() => {
+            this.canvas.focus();
+        }, 100);
+    }
+    
+    returnToMainMenu() {
+        // Pause/stop current session
+        if (this.gameState === 'playing') {
+            this.pauseGame();
+        }
+        
+        // Show main menu and hide game interface
+        document.getElementById('main-menu').style.display = 'flex';
+        document.getElementById('game-interface').style.display = 'none';
+        
+        // Reset game state
+        this.gameState = 'menu';
+        
+        // Update UI
+        this.updateUI();
+        
+        this.announceToScreenReader('Returned to main menu');
+    }
+    
+    confirmReturnToMenu() {
+        // If session is active and not completed, show confirmation
+        if ((this.gameState === 'playing' || this.gameState === 'paused') && 
+            this.currentSession.targetsCollected < this.currentSession.totalCoreTargets) {
+            this.showQuitConfirmation();
+        } else {
+            // If no active session or session completed, return directly
+            this.returnToMainMenu();
+        }
+    }
+    
+    showQuitConfirmation() {
+        // Show the pause modal instead of browser confirm
+        this.showPauseModal();
+    }
+    
+    showPauseModal() {
+        const modal = document.getElementById('pause-modal');
+        modal.showModal();
+        
+        // Focus the resume button by default
+        setTimeout(() => {
+            const resumeBtn = document.getElementById('resume-session-btn');
+            if (resumeBtn) resumeBtn.focus();
+        }, 100);
+        
+        // Add backdrop click handler
+        modal.addEventListener('click', this.handleBackdropClick.bind(this));
+        
+        this.announceToScreenReader('Session paused. Choose to resume or quit.');
+    }
+    
+    handleBackdropClick(event) {
+        // Only close if clicking the backdrop (modal itself), not the content
+        if (event.target === event.currentTarget) {
+            this.resumeGame();
+        }
+    }
+    
+    hidePauseModal() {
+        const modal = document.getElementById('pause-modal');
+        modal.close();
+    }
+    
+    updatePlayPauseButton() {
+        const btn = document.getElementById('play-pause-btn');
+        if (!btn) return; // Button might not exist in main menu
+        
+        const icon = btn.querySelector('.material-icons');
+        const label = btn.querySelector('.btn-label');
+        
+        if (this.gameState === 'playing') {
+            if (icon) icon.textContent = 'pause';
+            if (label) label.textContent = 'Pause';
+            btn.setAttribute('aria-label', 'Pause game');
+        } else {
+            if (icon) icon.textContent = 'play_arrow';
+            if (label) label.textContent = 'Play';
+            btn.setAttribute('aria-label', 'Play game');
+        }
+    }
+    
+    updateSoundButton() {
+        const btn = document.getElementById('sound-toggle-btn');
+        if (!btn) return;
+        
+        const icon = btn.querySelector('.material-icons');
+        const label = btn.querySelector('.btn-label');
+        
+        if (this.settings.audioEnabled) {
+            if (icon) icon.textContent = 'volume_up';
+            if (label) label.textContent = 'Sound On';
+            btn.setAttribute('aria-label', 'Turn sound off');
+        } else {
+            if (icon) icon.textContent = 'volume_off';
+            if (label) label.textContent = 'Sound Off';
+            btn.setAttribute('aria-label', 'Turn sound on');
         }
     }
     
