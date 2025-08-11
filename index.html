@@ -310,14 +310,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <div class="replay-code-preview">
-                    <small class="field-help">Game Code: <strong id="live-replay-code">BLUE-STAR-1234</strong></small>
-                    <small class="field-help-sub">This code will be generated for sharing with classmates</small>
-                </div>
-                <div class="action-controls">
-                    <button class="btn btn-primary" id="start-session">Create Game</button>
-                    <button class="btn btn-secondary" id="cancel-session">Cancel</button>
-                </div>
+                <button class="btn btn-primary" id="start-session">Create Game</button>
+                <button class="btn btn-secondary" id="cancel-session">Cancel</button>
             </div>
         </div>
     </dialog>
@@ -332,17 +326,10 @@
                 </button>
             </div>
             <div class="modal-body">
-                <form class="replay-form">
-                    <div class="form-group">
-                        <label for="replay-code-input">Enter Replay Code:</label>
-                        <input type="text" id="replay-code-input" placeholder="e.g., BLUE-CIRCLE-4K2P" required>
-                        <small class="field-help">Enter the exact replay code to play the same challenge. You can get codes from completed games.</small>
-                    </div>
-                    
-                    <div class="form-group">
-                        <p><strong>Note:</strong> Player settings (movement speed, input method, trail) can still be customized - only the target layout will match the original challenge.</p>
-                    </div>
-                </form>
+                <div class="replay-input-section">
+                    <label for="replay-code-input">Enter Replay Code:</label>
+                    <input type="text" id="replay-code-input" placeholder="e.g., BLUE-CIRCLE-4K2P" required>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-primary" id="start-replay">Play Challenge</button>
@@ -408,59 +395,60 @@
     </dialog>
 
     <!-- Session Results Modal -->
-    <dialog class="modal" id="results-modal" aria-labelledby="results-title">
+    <dialog class="modal results-modal" id="results-modal" aria-labelledby="results-title">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="results-title">Game Complete!</h2>
+                <h2 id="results-title">🎉 Game Complete!</h2>
                 <button class="modal-close" aria-label="Close game results">
                     <span class="material-icons">close</span>
                 </button>
             </div>
             <div class="modal-body">
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <h3>Game Time</h3>
-                        <div class="stat-value" id="results-time">0:00</div>
+                <!-- Achievement Banner -->
+                <div class="achievement-banner" id="achievement-banner" style="display: none;">
+                    <span class="material-icons achievement-icon">emoji_events</span>
+                    <span id="achievement-text">New Personal Best!</span>
+                </div>
+                
+                <!-- Main Time Display -->
+                <div class="completion-time">
+                    <div class="time-label">Your Time</div>
+                    <div class="time-value" id="results-time">0:00</div>
+                </div>
+                
+                <!-- Optional Stats (only shown if non-zero) -->
+                <div class="optional-stats" id="optional-stats">
+                    <div class="stat-item" id="bonus-stat" style="display: none;">
+                        <span class="stat-icon">⭐</span>
+                        <span class="stat-text"><span id="results-bonus-targets">0</span> bonus collected</span>
                     </div>
-                    
-                    <div class="stat-card">
-                        <h3>Core Targets</h3>
-                        <div class="stat-value" id="results-core-targets">0</div>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <h3>Completion</h3>
-                        <div class="stat-value" id="results-completion">100%</div>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <h3>Bonus Collected</h3>
-                        <div class="stat-value" id="results-bonus-targets">0</div>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <h3>Hazards Hit</h3>
-                        <div class="stat-value" id="results-hazard-targets">0</div>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <h3>Replay Code</h3>
-                        <div class="stat-value" id="results-seed">-</div>
-                        <button class="btn btn-small" id="copy-replay-code" style="margin-top: 8px; display: none;">
-                            <span class="material-icons" style="font-size: 16px;">content_copy</span>
-                            Copy Code
-                        </button>
+                    <div class="stat-item" id="hazard-stat" style="display: none;">
+                        <span class="stat-icon">⚠️</span>
+                        <span class="stat-text"><span id="results-hazard-targets">0</span> hazards hit</span>
                     </div>
                 </div>
                 
-                <div class="session-history">
-                    <h3>Recent Games</h3>
-                    <div id="session-history-list" class="history-list"></div>
+                <!-- Replay Code Section -->
+                <div class="replay-code-section">
+                    <div class="code-label">Share this challenge</div>
+                    <div class="code-container">
+                        <span class="code-value" id="results-seed">-</span>
+                        <button class="btn btn-copy" id="copy-replay-code">
+                            <span class="material-icons">content_copy</span>
+                            Copy
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-primary" id="replay-game">Replay Game</button>
-                <button class="btn btn-secondary" id="new-session">New Game</button>
+                <button class="btn btn-primary" id="replay-game">
+                    <span class="material-icons">replay</span>
+                    Play Again
+                </button>
+                <button class="btn btn-secondary" id="new-session">
+                    <span class="material-icons">add</span>
+                    New Game
+                </button>
                 <button class="btn btn-tertiary" id="close-results">Close</button>
             </div>
         </div>
@@ -470,7 +458,7 @@
     <dialog class="modal" id="stats-modal" aria-labelledby="stats-title">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="stats-title">Your Progress</h2>
+                <h2 id="stats-title">Your Progress & History</h2>
                 <button class="modal-close" aria-label="Close statistics">
                     <span class="material-icons">close</span>
                 </button>
@@ -486,15 +474,20 @@
                         <h3>Total Targets</h3>
                         <div class="stat-value" id="stats-targets">0</div>
                     </div>
-                    
-                    <div class="stat-card">
-                        <h3>Total Time</h3>
-                        <div class="stat-value" id="stats-time">0:00</div>
+                </div>
+                
+                <div class="session-history-section">
+                    <div class="history-header">
+                        <h3>Recent Sessions</h3>
+                        <button class="btn btn-danger clear-history-btn" id="clear-history-btn">
+                            Clear All History
+                        </button>
                     </div>
-                    
-                    <div class="stat-card">
-                        <h3>Average Session</h3>
-                        <div class="stat-value" id="stats-average">0:00</div>
+                    <div class="session-history" id="session-history">
+                        <div class="no-sessions">
+                            <p>No sessions completed yet.</p>
+                            <p>Complete your first session to see your progress history!</p>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -224,11 +224,21 @@ class DirectionalSkillsGame {
     }
     
     startSession() {
-        this.currentSession.startTime = Date.now();
-        this.gameState = 'playing';
+        // Start in "ready" state - timer doesn't start until first input
+        this.gameState = 'ready';
         this.canvas.focus();
         this.updatePlayPauseButton();
-        this.announceToScreenReader('Session started. Use arrow keys or configured input methods to collect targets.');
+        this.announceToScreenReader('Session ready. Press any movement key or click to start the timer and begin.');
+    }
+    
+    // New method to actually begin the timed session
+    beginTimedSession() {
+        if (this.gameState !== 'ready') return;
+        
+        this.currentSession.startTime = Date.now();
+        this.gameState = 'playing';
+        this.updatePlayPauseButton();
+        this.announceToScreenReader('Timer started! Collect all targets as quickly as possible.');
     }
     
     completeSession() {
@@ -610,6 +620,10 @@ class DirectionalSkillsGame {
             if (this.gameState === 'menu') this.showMainMenu();
         });
         
+        // Clear history button
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
+        clearHistoryBtn.addEventListener('click', () => this.clearHistory());
+        
         // Session modal
         const sessionModal = document.getElementById('session-modal');
         const sessionClose = sessionModal.querySelector('.modal-close');
@@ -677,7 +691,15 @@ class DirectionalSkillsGame {
         // Close modals on backdrop click
         [settingsModal, helpModal, statsModal, sessionModal, replayModal, resultsModal, pauseModal].forEach(modal => {
             modal.addEventListener('click', (e) => {
-                if (e.target === modal) modal.close();
+                if (e.target === modal) {
+                    modal.close();
+                    // Handle specific modal close behaviors
+                    if (modal === resultsModal) {
+                        this.returnToMainMenu();
+                    } else if ((modal === helpModal || modal === statsModal) && this.gameState === 'menu') {
+                        this.showMainMenu();
+                    }
+                }
             });
         });
     }
@@ -764,7 +786,7 @@ class DirectionalSkillsGame {
         }
         
         // Handle movement keys
-        if (this.gameState === 'playing') {
+        if (this.gameState === 'playing' || this.gameState === 'ready') {
             this.handleMovementInput(e.code);
         }
     }
@@ -787,6 +809,11 @@ class DirectionalSkillsGame {
         
         const direction = movementKeys[keyCode];
         if (direction) {
+            // Start timer on first movement input
+            if (this.gameState === 'ready') {
+                this.beginTimedSession();
+            }
+            
             if (this.sessionConfig.inputMethod === 'continuous') {
                 // Continuous movement: single press changes direction
                 this.setContinuousDirection(direction);
@@ -859,7 +886,12 @@ class DirectionalSkillsGame {
 
     // Mouse Input Handlers
     handleMouseClick(e) {
-        if (this.sessionConfig.inputMethod !== 'mouse' || this.gameState !== 'playing') return;
+        if (this.sessionConfig.inputMethod !== 'mouse' || (this.gameState !== 'playing' && this.gameState !== 'ready')) return;
+        
+        // Start timer on first mouse click
+        if (this.gameState === 'ready') {
+            this.beginTimedSession();
+        }
         
         const rect = this.canvas.getBoundingClientRect();
         const targetX = e.clientX - rect.left;
@@ -1350,10 +1382,12 @@ class DirectionalSkillsGame {
     }
     
     update() {
-        if (this.gameState !== 'playing') return;
+        if (this.gameState !== 'playing' && this.gameState !== 'ready') return;
         
-        // Update timer display in real-time
-        this.updateTimerDisplay();
+        // Update timer display in real-time (only when playing)
+        if (this.gameState === 'playing') {
+            this.updateTimerDisplay();
+        }
         
         // Update trail fade
         const currentTime = Date.now();
@@ -1370,7 +1404,7 @@ class DirectionalSkillsGame {
             this.updateClickToMove();
         }
         
-        // Update targets (for moving targets in sessions)
+        // Update targets (for moving targets in sessions) - only when playing
         if (this.currentSession && this.gameState === 'playing') {
             this.updatePracticeTargets();
         }
@@ -1493,7 +1527,7 @@ class DirectionalSkillsGame {
         this.ctx.fillStyle = '#f8f9fa';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
-        if (this.gameState === 'playing' || this.gameState === 'paused') {
+        if (this.gameState === 'playing' || this.gameState === 'paused' || this.gameState === 'ready') {
             // Draw trail
             this.drawTrail();
             
@@ -1502,6 +1536,11 @@ class DirectionalSkillsGame {
             
             // Draw player
             this.drawPlayer();
+            
+            // Draw ready instructions if in ready state
+            if (this.gameState === 'ready') {
+                this.drawReadyInstructions();
+            }
             
             // Draw pause overlay if paused
             if (this.gameState === 'paused') {
@@ -1564,6 +1603,29 @@ class DirectionalSkillsGame {
             
             const arrowSize = size * 0.5;
             this.drawCustomArrow(this.player.x, this.player.y, arrowSize, this.lastDirection);
+        }
+    }
+    
+    drawReadyInstructions() {
+        // Draw centered message with high contrast for maximum visibility
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        // Draw semi-transparent background for text readability
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(centerX - 120, centerY - 25, 240, 50);
+        
+        // Draw white text with large, bold font
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 24px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        // Simple clear message
+        if (this.sessionConfig.inputMethod === 'mouse') {
+            this.ctx.fillText('Click to start', centerX, centerY);
+        } else {
+            this.ctx.fillText('Move to start', centerX, centerY);
         }
     }
     
@@ -1896,13 +1958,144 @@ class DirectionalSkillsGame {
         // Calculate total sessions and targets from history
         const totalSessions = this.sessionHistory.length;
         const totalTargets = this.sessionHistory.reduce((sum, session) => sum + session.targetsCollected, 0);
-        const totalTime = this.sessionHistory.reduce((sum, session) => sum + session.totalTime, 0);
-        const averageTime = totalSessions > 0 ? totalTime / totalSessions : 0;
         
+        // Update summary stats (removed best time and average time)
         document.getElementById('stats-sessions').textContent = totalSessions;
         document.getElementById('stats-targets').textContent = totalTargets;
-        document.getElementById('stats-time').textContent = this.formatTime(totalTime);
-        document.getElementById('stats-average').textContent = this.formatTime(averageTime);
+        
+        // Update session history
+        this.updateSessionHistory();
+    }
+    
+    updateSessionHistory() {
+        const historyContainer = document.getElementById('session-history');
+        
+        if (this.sessionHistory.length === 0) {
+            historyContainer.innerHTML = `
+                <div class="no-sessions">
+                    <p>No sessions completed yet.</p>
+                    <p>Complete your first session to see your progress history!</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Show recent sessions (last 10, most recent first)
+        const recentSessions = [...this.sessionHistory].reverse();
+        
+        historyContainer.innerHTML = recentSessions.map((session, index) => {
+            const date = new Date(session.endTime || session.startTime);
+            const timeStr = this.formatTime(session.totalTime);
+            const replayCode = session.seed || 'N/A';
+            const dateStr = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+            
+            return `
+                <div class="session-item">
+                    <div class="session-time">${timeStr}</div>
+                    <div class="session-details">
+                        <div class="session-replay-info">
+                            <div class="replay-code">${replayCode}</div>
+                            <div class="session-date">${dateStr}</div>
+                            <button class="copy-replay-btn" onclick="game.copyReplayCode('${replayCode}')" 
+                                    title="Copy replay code">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    copyReplayCode(replayCode) {
+        if (!replayCode || replayCode === 'N/A') {
+            this.announceToScreenReader('No replay code available for this session');
+            return;
+        }
+        
+        // Copy to clipboard
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(replayCode).then(() => {
+                this.announceToScreenReader(`Replay code ${replayCode} copied to clipboard`);
+                this.showToast(`Replay code copied: ${replayCode}`);
+            }).catch(err => {
+                console.warn('Failed to copy to clipboard:', err);
+                this.fallbackCopyToClipboard(replayCode);
+            });
+        } else {
+            this.fallbackCopyToClipboard(replayCode);
+        }
+    }
+    
+    fallbackCopyToClipboard(text) {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            this.announceToScreenReader(`Replay code ${text} copied to clipboard`);
+            this.showToast(`Replay code copied: ${text}`);
+        } catch (err) {
+            console.warn('Fallback copy failed:', err);
+            this.announceToScreenReader('Failed to copy replay code');
+        }
+        
+        document.body.removeChild(textArea);
+    }
+    
+    showToast(message) {
+        // Create a simple toast notification
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--primary-color);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // Fade in
+        setTimeout(() => toast.style.opacity = '1', 10);
+        
+        // Fade out and remove
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 2000);
+    }
+    
+    clearHistory() {
+        // Confirm before clearing
+        if (confirm('Are you sure you want to clear all progress and session history? This action cannot be undone.')) {
+            this.sessionHistory = [];
+            this.saveSessionHistory();
+            this.updateStatsModal();
+            this.showToast('Progress and history cleared');
+            this.announceToScreenReader('All progress and session history has been cleared');
+        }
     }
     
     // Game Control Methods
@@ -2503,63 +2696,88 @@ class DirectionalSkillsGame {
     showSessionResults() {
         const modal = document.getElementById('results-modal');
         
-        // Update results display
+        // Update main time display
         document.getElementById('results-time').textContent = this.formatTime(this.currentSession.totalTime);
-        document.getElementById('results-core-targets').textContent = this.currentSession.coreTargetsCollected;
-        document.getElementById('results-bonus-targets').textContent = this.currentSession.bonusTargetsCollected;
-        document.getElementById('results-hazard-targets').textContent = this.currentSession.hazardTargetsHit;
+        
+        // Check for personal best
+        const isPersonalBest = this.checkPersonalBest();
+        const achievementBanner = document.getElementById('achievement-banner');
+        const achievementText = document.getElementById('achievement-text');
+        
+        if (isPersonalBest.isRecord) {
+            achievementBanner.style.display = 'flex';
+            achievementText.textContent = isPersonalBest.message;
+        } else {
+            achievementBanner.style.display = 'none';
+        }
+        
+        // Show optional stats only if non-zero
+        const bonusStat = document.getElementById('bonus-stat');
+        const hazardStat = document.getElementById('hazard-stat');
+        
+        if (this.currentSession.bonusTargetsCollected > 0) {
+            document.getElementById('results-bonus-targets').textContent = this.currentSession.bonusTargetsCollected;
+            bonusStat.style.display = 'flex';
+        } else {
+            bonusStat.style.display = 'none';
+        }
+        
+        if (this.currentSession.hazardTargetsHit > 0) {
+            document.getElementById('results-hazard-targets').textContent = this.currentSession.hazardTargetsHit;
+            hazardStat.style.display = 'flex';
+        } else {
+            hazardStat.style.display = 'none';
+        }
+        
+        // Update replay code
         document.getElementById('results-seed').textContent = this.currentSession.seed;
         
-        // Test replay code accuracy for this session
-        console.log('🎮 Session completed with code:', this.currentSession.seed);
-        const decoded = this.decodeReplayCode(this.currentSession.seed);
-        if (decoded) {
-            console.log('✅ Code decodes to configuration:', decoded);
-            console.log('🔄 Current session config:', {
-                targetCounts: this.sessionConfig.targetCounts,
-                targetSize: this.sessionConfig.targetSize,
-                playerSpeed: this.sessionConfig.playerSpeed,
-                playerTrail: this.sessionConfig.playerTrail,
-                inputMethod: this.sessionConfig.inputMethod,
-                inputBuffer: this.sessionConfig.inputBuffer,
-                boundaries: this.sessionConfig.boundaries,
-                feedback: this.sessionConfig.feedback
-            });
-            
-            const configMatches = this.compareConfigs(decoded, {
-                targetCounts: this.sessionConfig.targetCounts,
-                targetSize: this.sessionConfig.targetSize,
-                playerSpeed: this.sessionConfig.playerSpeed,
-                playerTrail: this.sessionConfig.playerTrail,
-                inputMethod: this.sessionConfig.inputMethod,
-                inputBuffer: this.sessionConfig.inputBuffer,
-                boundaries: this.sessionConfig.boundaries,
-                feedback: this.sessionConfig.feedback
-            });
-            
-            console.log(configMatches ? '✅ Configuration matches!' : '❌ Configuration mismatch detected!');
-        } else {
-            console.log('❌ Failed to decode replay code');
-        }
-        
-        // Show/hide and setup copy button
+        // Setup copy button
         const copyButton = document.getElementById('copy-replay-code');
-        if (this.currentSession.seed) {
-            copyButton.style.display = 'inline-flex';
-            copyButton.onclick = () => this.copyReplayCode();
-        } else {
-            copyButton.style.display = 'none';
-        }
-        
-        // Calculate completion percentage based only on core targets
-        const coreCompletion = this.currentSession.totalCoreTargets > 0 ? 
-            (this.currentSession.coreTargetsCollected / this.currentSession.totalCoreTargets) * 100 : 100;
-        document.getElementById('results-completion').textContent = `${Math.round(coreCompletion)}%`;
-        
-        // Update session history display
-        this.updateSessionHistoryDisplay();
+        copyButton.onclick = () => this.copyReplayCode();
         
         modal.showModal();
+    }
+    
+    checkPersonalBest() {
+        const currentTime = this.currentSession.totalTime;
+        const history = this.sessionHistory.filter(session => session.completed);
+        
+        if (history.length === 0) {
+            return { isRecord: true, message: "🎉 First completion!" };
+        }
+        
+        // Find best time for similar configuration (same target counts)
+        const similarSessions = history.filter(session => {
+            const currentCounts = this.sessionConfig.targetCounts;
+            const sessionCounts = session.config?.targetCounts;
+            if (!sessionCounts) return false;
+            
+            return (
+                sessionCounts.stationary === currentCounts.stationary &&
+                sessionCounts.moving === currentCounts.moving &&
+                sessionCounts.flee === currentCounts.flee &&
+                sessionCounts.bonus === currentCounts.bonus &&
+                sessionCounts.hazard === currentCounts.hazard
+            );
+        });
+        
+        if (similarSessions.length === 0) {
+            return { isRecord: true, message: "🆕 New challenge completed!" };
+        }
+        
+        const bestTime = Math.min(...similarSessions.map(s => s.totalTime));
+        const averageTime = similarSessions.reduce((sum, s) => sum + s.totalTime, 0) / similarSessions.length;
+        
+        // Fix the logic: if current time is better (smaller) than best time, it's a new record
+        if (currentTime < bestTime) {
+            return { isRecord: true, message: "🏆 New Personal Best!" };
+        } else if (currentTime < averageTime * 1.1) { // Within 10% of average is considered good
+            return { isRecord: true, message: "📈 Great performance!" };
+        }
+        
+        // Don't show achievement banner for average or poor performance
+        return { isRecord: false, message: "" };
     }
     
     copyReplayCode() {
@@ -2603,7 +2821,7 @@ class DirectionalSkillsGame {
         const button = document.getElementById('copy-replay-code');
         const originalText = button.innerHTML;
         
-        button.innerHTML = '<span class="material-icons" style="font-size: 16px;">check</span> Copied!';
+        button.innerHTML = '<span class="material-icons">check</span> Copied!';
         button.style.backgroundColor = '#4caf50';
         
         setTimeout(() => {

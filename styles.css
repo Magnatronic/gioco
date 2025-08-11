@@ -545,12 +545,404 @@ html, body {
     transform: translateY(-1px);
 }
 
+/* Results Modal - Celebration Design */
+.results-modal {
+    padding: 0;
+    background: transparent;
+    border: none;
+    margin: auto;
+}
+
+.results-modal::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+}
+
+.results-modal .modal-content {
+    max-width: 400px;
+    min-width: 350px;
+    text-align: center;
+    background: var(--surface-color);
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    margin: auto;
+}
+
+.results-modal .modal-header {
+    padding: 16px 20px 12px 20px;
+}
+
+.results-modal .modal-header h2 {
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+.results-modal .modal-body {
+    padding: 16px 20px;
+}
+
+.achievement-banner {
+    background: linear-gradient(135deg, #f39c12, #e67e22);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    box-shadow: 0 3px 10px rgba(243, 156, 18, 0.3);
+}
+
+.achievement-icon {
+    font-size: 1.2rem;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.completion-time {
+    margin-bottom: 20px;
+}
+
+.time-label {
+    font-size: 0.9rem;
+    color: var(--text-light);
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.time-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    line-height: 1;
+    text-shadow: 0 2px 4px rgba(52, 152, 219, 0.2);
+}
+
+.optional-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 20px;
+    padding: 0 10px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-color);
+    border-radius: 16px;
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+.stat-icon {
+    font-size: 1rem;
+}
+
+.replay-code-section {
+    background: var(--bg-color);
+    padding: 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+
+.code-label {
+    font-size: 0.85rem;
+    color: var(--text-light);
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+.code-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+}
+
+.code-value {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    background: var(--surface-color);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    letter-spacing: 0.5px;
+    flex: 1;
+    max-width: 240px;
+    word-break: break-all;
+    line-height: 1.2;
+}
+
+.btn-copy {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    min-width: 70px;
+}
+
+.btn-copy:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
+}
+
+.btn-copy:focus {
+    outline: 2px solid var(--focus-color);
+    outline-offset: 2px;
+}
+
+.btn-copy .material-icons {
+    font-size: 0.9rem;
+}
+
+.results-modal .modal-footer {
+    padding: 12px 20px 16px 20px;
+    justify-content: center;
+    gap: 12px;
+}
+
+.results-modal .modal-footer .btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 100px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+}
+
+.results-modal .modal-footer .btn .material-icons {
+    font-size: 1rem;
+}
+
 /* Statistics Modal */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 16px;
     margin-bottom: 32px;
+}
+
+/* Center the stats modal */
+#stats-modal {
+    margin: auto;
+    max-width: 600px;
+    width: 90vw;
+    max-height: 80vh;
+}
+
+#stats-modal .modal-content {
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#stats-modal .modal-body {
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Center and simplify the replay modal */
+#replay-modal {
+    margin: auto;
+    max-width: 400px;
+    width: 90vw;
+}
+
+.replay-input-section {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.replay-input-section label {
+    display: block;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.replay-input-section input {
+    width: 100%;
+    max-width: 250px;
+    padding: 12px 16px;
+    font-size: 1rem;
+    text-align: center;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-family: monospace;
+    letter-spacing: 0.5px;
+    transition: border-color 0.2s ease;
+}
+
+.replay-input-section input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.replay-input-section input::placeholder {
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+/* Session History Section */
+.session-history-section {
+    margin-top: 24px;
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.history-header h3 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.clear-history-btn {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    border: 1px solid #dc3545;
+    background: transparent;
+    color: #dc3545;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.clear-history-btn:hover {
+    background: #dc3545;
+    color: white;
+}
+
+.clear-history-btn:active {
+    transform: scale(0.95);
+}
+
+.session-history {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-overlay);
+}
+
+.session-item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
+}
+
+.session-item:last-child {
+    border-bottom: none;
+}
+
+.session-item:hover {
+    background: var(--bg-color);
+}
+
+.session-time {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 1rem;
+    min-width: 80px;
+}
+
+.session-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.session-replay-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.replay-code {
+    font-family: monospace;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-muted);
+    min-width: 120px;
+    text-align: center;
+}
+
+.session-date {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.copy-replay-btn {
+    background: none;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+}
+
+.copy-replay-btn:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+.copy-replay-btn:active {
+    transform: scale(0.95);
+}
+
+.no-sessions {
+    padding: 32px 24px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.no-sessions p {
+    margin-bottom: 8px;
+}
+
+.no-sessions p:last-child {
+    font-size: 0.9rem;
+    opacity: 0.8;
 }
 
 /* Session History Styling */
@@ -628,6 +1020,14 @@ html, body {
     font-size: 2rem;
     font-weight: 700;
     color: var(--primary-color);
+}
+
+/* Center and size the session modal */
+#session-modal {
+    margin: auto;
+    max-width: 700px;
+    width: 90vw;
+    max-height: 90vh;
 }
 
 /* Practice Mode Modal */
