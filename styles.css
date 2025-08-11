@@ -420,10 +420,46 @@ html, body {
     padding: 24px;
     border-top: 1px solid var(--border-color);
     display: flex;
-    gap: 12px;
-    justify-content: flex-end;
+    flex-direction: column;
+    gap: 16px;
     background: var(--bg-color);
     border-radius: 0 0 12px 12px;
+}
+
+.replay-code-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 12px;
+    background: var(--surface-color);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.replay-code-preview .field-help {
+    font-size: 14px;
+    color: var(--text-color);
+    margin: 0;
+}
+
+.replay-code-preview .field-help-sub {
+    font-size: 12px;
+    color: var(--text-light);
+    margin: 0;
+}
+
+.replay-code-preview strong {
+    font-family: 'Courier New', monospace;
+    color: var(--primary-color);
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+.action-controls {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
 }
 
 /* Form Styles */

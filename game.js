@@ -108,6 +108,10 @@ class DirectionalSkillsGame {
         // Update UI
         this.updateUI();
         this.updateSoundButton();
+        
+        // Make testing available globally for easy debugging
+        window.testReplaySystem = () => this.testReplayCodeAccuracy();
+        console.log('🧪 To test replay code accuracy, run: testReplaySystem()');
     }
     
     showMainMenu() {
@@ -165,8 +169,31 @@ class DirectionalSkillsGame {
     }
     
     initializeNewSession(seed = null) {
+        // Handle replay codes and auto-generation
+        let finalSeed;
+        let configFromCode = null;
+        
+        if (seed) {
+            // If we have a seed parameter, try to decode configuration from it (REPLAY MODE)
+            configFromCode = this.decodeReplayCode(seed);
+            if (configFromCode) {
+                // Apply the decoded configuration to sessionConfig
+                this.sessionConfig = { ...this.sessionConfig, ...configFromCode };
+                console.log('🎮 Applied configuration from replay code:', configFromCode);
+            }
+            finalSeed = seed;
+        } else if (this.sessionConfig.seed) {
+            // Use seed from session config if provided (FORM MODE - seed is pre-generated)
+            finalSeed = this.sessionConfig.seed;
+            console.log('🎮 Using form configuration with pre-generated seed:', finalSeed);
+        } else {
+            // Auto-generate a new replay code from current session config (FALLBACK)
+            finalSeed = this.generateReplayCodeFromConfig(this.sessionConfig);
+            console.log('🎮 Auto-generated new replay code from session config:', finalSeed);
+        }
+        
         this.currentSession = {
-            seed: seed || this.generateSessionSeed(),
+            seed: finalSeed,
             startTime: null,
             endTime: null,
             totalTime: 0,
@@ -184,11 +211,16 @@ class DirectionalSkillsGame {
         // Set seed for reproducible random generation
         this.sessionConfig.seed = this.currentSession.seed;
         
-        // Generate targets using the seed
-        this.generateSessionTargets();
+        // Note: Seeded random number generator will be initialized later
+        // when targets are actually generated to avoid state corruption
         
-        // Set player position based on seed for reproducibility
-        this.setSeededPlayerPosition();
+        // Generate targets using the seeded random - but only if canvas is properly sized
+        // If canvas is small (not yet properly set up), skip target generation for now
+        if (this.canvas.width > 400 && this.canvas.height > 200) {
+            this.generateSessionTargets();
+        } else {
+            console.log('🎯 Canvas too small, deferring target generation until interface is shown');
+        }
     }
     
     startSession() {
@@ -243,16 +275,33 @@ class DirectionalSkillsGame {
     }
     
     // Seeded Random Number Generator for reproducible sessions
-    seededRandom(seed) {
-        const x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
+    seededRandom() {
+        // Linear Congruential Generator (LCG)
+        this.seedValue = (this.seedValue * 1664525 + 1013904223) % 4294967296;
+        return this.seedValue / 4294967296;
     }
     
     generateSessionTargets() {
         this.targets = [];
         
-        // Convert text seed to numeric seed for random generation
-        let currentSeed = this.textToNumericSeed(this.sessionConfig.seed);
+        // Initialize seeded random number generator right before target generation
+        // This ensures the random state is clean and consistent
+        const numericSeed = this.hashCodeToSeed(this.currentSession.seed);
+        console.log('🌱 Setting seed for target generation:', this.currentSession.seed, '→', numericSeed);
+        this.seedRandom(numericSeed);
+        console.log('🌱 Seed value after initialization:', this.seedValue);
+        
+        // Set player position using seeded random AFTER seed is initialized
+        this.setSeededPlayerPosition();
+        
+        // Debug: Show current configuration
+        console.log('🎯 Generating targets with configuration:', {
+            targetCounts: this.sessionConfig.targetCounts,
+            targetSize: this.sessionConfig.targetSize
+        });
+        
+        console.log('🎯 Canvas dimensions:', this.canvas.width, 'x', this.canvas.height);
+        console.log('🎯 Player position:', Math.round(this.player.x), ',', Math.round(this.player.y));
         
         // Get target size from session config
         const targetSizes = {
@@ -272,10 +321,9 @@ class DirectionalSkillsGame {
             totalTargets += count;
             
             for (let j = 0; j < count; j++) {
-                currentSeed++;
                 // Map 'stationary' back to 'static' for target creation
                 const targetType = type === 'stationary' ? 'static' : type;
-                const target = this.createSeededTarget(targetType, targetSize, currentSeed);
+                const target = this.createDeterministicTarget(targetType, targetSize);
                 if (target) {
                     this.targets.push(target);
                 }
@@ -284,8 +332,7 @@ class DirectionalSkillsGame {
         
         // Ensure at least one target exists
         if (totalTargets === 0) {
-            currentSeed++;
-            const target = this.createSeededTarget('static', targetSize, currentSeed);
+            const target = this.createDeterministicTarget('static', targetSize);
             if (target) {
                 this.targets.push(target);
                 totalTargets = 1;
@@ -305,8 +352,7 @@ class DirectionalSkillsGame {
         // Ensure at least one core target for a valid session
         if (this.currentSession.totalCoreTargets === 0 && totalTargets > 0) {
             // If only bonus/hazard targets, add one static target
-            currentSeed++;
-            const target = this.createSeededTarget('static', targetSize, currentSeed);
+            const target = this.createDeterministicTarget('static', targetSize);
             if (target) {
                 this.targets.push(target);
                 this.currentSession.totalCoreTargets = 1;
@@ -319,7 +365,9 @@ class DirectionalSkillsGame {
         this.updateUI();
     }
     
-    createSeededTarget(type, size, seed) {
+
+    
+    createDeterministicTarget(type, size) {
         const margin = size + 20;
         // Account for metrics overlay in top-left corner (approximately 160px x 60px)
         const overlayWidth = 160;
@@ -327,11 +375,8 @@ class DirectionalSkillsGame {
         const maxAttempts = 50;
         
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            const seedX = seed + attempt * 1000;
-            const seedY = seed + attempt * 1000 + 500;
-            
-            const x = margin + this.seededRandom(seedX) * (this.canvas.width - 2 * margin);
-            const y = margin + this.seededRandom(seedY) * (this.canvas.height - 2 * margin);
+            const x = margin + this.seededRandom() * (this.canvas.width - 2 * margin);
+            const y = margin + this.seededRandom() * (this.canvas.height - 2 * margin);
             
             // Check if target would be under the overlay (top-left corner)
             const isUnderOverlay = (x < overlayWidth + margin && y < overlayHeight + margin);
@@ -356,14 +401,14 @@ class DirectionalSkillsGame {
             }
             
             if (!tooClose) {
-                return this.createTargetByType(type, x, y, size, seed);
+                return this.createTargetByType(type, x, y, size, 0);
             }
         }
         
         // Fallback: create at seeded position if spacing fails
-        const x = margin + this.seededRandom(seed) * (this.canvas.width - 2 * margin);
-        const y = margin + this.seededRandom(seed + 1) * (this.canvas.height - 2 * margin);
-        return this.createTargetByType(type, x, y, size, seed);
+        const x = margin + this.seededRandom() * (this.canvas.width - 2 * margin);
+        const y = margin + this.seededRandom() * (this.canvas.height - 2 * margin);
+        return this.createTargetByType(type, x, y, size, 0);
     }
     
     setupCanvas() {
@@ -387,20 +432,24 @@ class DirectionalSkillsGame {
     
     setSeededPlayerPosition() {
         // Set player position based on session seed for reproducibility
-        if (this.sessionConfig.seed) {
-            const numericSeed = this.textToNumericSeed(this.sessionConfig.seed);
+        if (this.currentSession && this.currentSession.seed) {
+            // Ensure seeded random is initialized (in case this is called separately)
+            if (!this.seedValue) {
+                const numericSeed = this.hashCodeToSeed(this.currentSession.seed);
+                this.seedRandom(numericSeed);
+            }
+            
             const margin = this.player.size + 20; // Keep player away from edges
             
-            // Use different seed offsets to get different position
-            const xSeed = numericSeed + 9999; // Different seed for X position
-            const ySeed = numericSeed + 7777; // Different seed for Y position
+            this.player.x = margin + this.seededRandom() * (this.canvas.width - 2 * margin);
+            this.player.y = margin + this.seededRandom() * (this.canvas.height - 2 * margin);
             
-            this.player.x = margin + this.seededRandom(xSeed) * (this.canvas.width - 2 * margin);
-            this.player.y = margin + this.seededRandom(ySeed) * (this.canvas.height - 2 * margin);
+            console.log('🎯 Set seeded player position:', Math.round(this.player.x), ',', Math.round(this.player.y), 'with seed:', this.currentSession.seed);
         } else {
             // Default to center if no seed
             this.player.x = this.canvas.width / 2;
             this.player.y = this.canvas.height / 2;
+            console.log('🎯 Set default player position (center):', Math.round(this.player.x), ',', Math.round(this.player.y));
         }
         
         // Clear player trail when position is set
@@ -448,14 +497,53 @@ class DirectionalSkillsGame {
         oscillator.stop(this.audioContext.currentTime + duration);
     }
     
+    // Replay Code Generation System
+    generateReplayCode() {
+        const colors = ['RED', 'BLUE', 'GREEN', 'GOLD', 'PINK', 'CYAN', 'LIME', 'NAVY'];
+        const shapes = ['CIRCLE', 'SQUARE', 'STAR', 'HEART', 'ARROW', 'PLUS', 'CROSS', 'WAVE'];
+        const numbers = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const shape = shapes[Math.floor(Math.random() * shapes.length)];
+        
+        // Generate 4-character random suffix
+        let suffix = '';
+        for (let i = 0; i < 4; i++) {
+            suffix += numbers[Math.floor(Math.random() * numbers.length)];
+        }
+        
+        return `${color}-${shape}-${suffix}`;
+    }
+    
+    hashCodeToSeed(code) {
+        // Convert replay code to a numeric seed for deterministic generation
+        let hash = 0;
+        if (!code || code.length === 0) return Math.random();
+        
+        for (let i = 0; i < code.length; i++) {
+            const char = code.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32-bit integer
+        }
+        
+        // Ensure positive seed
+        return Math.abs(hash);
+    }
+    
+    seedRandom(seed) {
+        // Initialize the seeded random number generator without advancing the state
+        this.seedValue = seed;
+        console.log('🌱 Initialized seed value:', this.seedValue);
+    }
+    
     setupEventListeners() {
         // Keyboard events
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
         document.addEventListener('keyup', (e) => this.handleKeyUp(e));
         
         // Main menu card events
-        document.getElementById('start-practice-btn').addEventListener('click', () => this.startQuickPractice());
         document.getElementById('configure-session-btn').addEventListener('click', () => this.openSessionSetup());
+        document.getElementById('play-replay-btn').addEventListener('click', () => this.openReplayEntry());
         document.getElementById('progress-history-btn').addEventListener('click', () => this.openStats());
         document.getElementById('help-support-btn').addEventListener('click', () => this.openHelp());
         
@@ -523,14 +611,20 @@ class DirectionalSkillsGame {
         const sessionClose = sessionModal.querySelector('.modal-close');
         const startSession = document.getElementById('start-session');
         const cancelSession = document.getElementById('cancel-session');
-        const sessionPresets = document.getElementById('practice-presets');
-        const savePreset = document.getElementById('save-preset');
         
         sessionClose.addEventListener('click', () => sessionModal.close());
         startSession.addEventListener('click', () => this.startNewSession());
         cancelSession.addEventListener('click', () => sessionModal.close());
-        sessionPresets.addEventListener('change', (e) => this.loadSessionPreset(e.target.value));
-        savePreset.addEventListener('click', () => this.saveSessionPreset());
+        
+        // Replay modal
+        const replayModal = document.getElementById('replay-modal');
+        const replayClose = replayModal.querySelector('.modal-close');
+        const startReplay = document.getElementById('start-replay');
+        const cancelReplay = document.getElementById('cancel-replay');
+        
+        replayClose.addEventListener('click', () => replayModal.close());
+        startReplay.addEventListener('click', () => this.startReplaySession());
+        cancelReplay.addEventListener('click', () => replayModal.close());
         
         // Session results modal
         const resultsModal = document.getElementById('results-modal');
@@ -577,7 +671,7 @@ class DirectionalSkillsGame {
         this.setupSessionFormEvents();
         
         // Close modals on backdrop click
-        [settingsModal, helpModal, statsModal, sessionModal, resultsModal, pauseModal].forEach(modal => {
+        [settingsModal, helpModal, statsModal, sessionModal, replayModal, resultsModal, pauseModal].forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) modal.close();
             });
@@ -973,8 +1067,8 @@ class DirectionalSkillsGame {
                     ...baseTarget,
                     color: '#3498db', // Blue - keep existing, good contrast
                     velocity: {
-                        x: seed !== null ? (this.seededRandom(seed + 100) - 0.5) * 2 : (Math.random() - 0.5) * 2,
-                        y: seed !== null ? (this.seededRandom(seed + 200) - 0.5) * 2 : (Math.random() - 0.5) * 2
+                        x: (this.seededRandom() - 0.5) * 2,
+                        y: (this.seededRandom() - 0.5) * 2
                     },
                     pattern: 'linear' // Could be 'linear', 'circular', 'bounce'
                 };
@@ -1865,6 +1959,14 @@ class DirectionalSkillsGame {
         modal.showModal();
     }
     
+    openReplayEntry() {
+        this.pauseGame();
+        const modal = document.getElementById('replay-modal');
+        // Clear any previous input
+        document.getElementById('replay-code-input').value = '';
+        modal.showModal();
+    }
+    
     loadSettingsToForm() {
         document.getElementById('movement-speed').value = this.settings.movementSpeed;
         document.getElementById('input-buffering').checked = this.settings.inputBuffering;
@@ -1923,12 +2025,12 @@ class DirectionalSkillsGame {
         this.pauseGame();
         const modal = document.getElementById('session-modal');
         this.loadSessionConfigToForm();
+        this.updateLiveReplayCode(); // Generate initial code
         modal.showModal();
     }
 
     loadSessionConfigToForm() {
         // Load current session configuration to form
-        document.getElementById('session-seed').value = this.sessionConfig.seed || '';
         
         // Target counts
         document.getElementById('target-static-count').value = this.sessionConfig.targetCounts.stationary;
@@ -1974,37 +2076,68 @@ class DirectionalSkillsGame {
         document.getElementById('target-static-count').addEventListener('input', (e) => {
             document.getElementById('target-static-count-value').textContent = e.target.value;
             this.updateTotalTargets();
+            this.updateLiveReplayCode();
         });
         
         document.getElementById('target-moving-count').addEventListener('input', (e) => {
             document.getElementById('target-moving-count-value').textContent = e.target.value;
             this.updateTotalTargets();
+            this.updateLiveReplayCode();
         });
         
         document.getElementById('target-flee-count').addEventListener('input', (e) => {
             document.getElementById('target-flee-count-value').textContent = e.target.value;
             this.updateTotalTargets();
+            this.updateLiveReplayCode();
         });
         
         document.getElementById('target-bonus-count').addEventListener('input', (e) => {
             document.getElementById('target-bonus-count-value').textContent = e.target.value;
             this.updateTotalTargets();
+            this.updateLiveReplayCode();
         });
         
         document.getElementById('target-hazard-count').addEventListener('input', (e) => {
             document.getElementById('target-hazard-count-value').textContent = e.target.value;
             this.updateTotalTargets();
+            this.updateLiveReplayCode();
         });
         
-        // Player speed slider
+        // Target size radio buttons
+        document.querySelectorAll('input[name="target-size"]').forEach(radio => {
+            radio.addEventListener('change', () => this.updateLiveReplayCode());
+        });
+        
+        // Player settings
         document.getElementById('player-speed').addEventListener('input', (e) => {
             this.updatePlayerSpeedLabel(e.target.value);
+            this.updateLiveReplayCode();
+        });
+        
+        document.querySelectorAll('input[name="player-trail"]').forEach(radio => {
+            radio.addEventListener('change', () => this.updateLiveReplayCode());
+        });
+        
+        // Input method radio buttons
+        document.querySelectorAll('input[name="input-method"]').forEach(radio => {
+            radio.addEventListener('change', () => this.updateLiveReplayCode());
         });
         
         // Input buffer slider
         document.getElementById('input-buffer').addEventListener('input', (e) => {
             document.getElementById('input-buffer-value').textContent = e.target.value + 'ms';
+            this.updateLiveReplayCode();
         });
+        
+        // Environment settings
+        document.querySelectorAll('input[name="game-boundaries"]').forEach(radio => {
+            radio.addEventListener('change', () => this.updateLiveReplayCode());
+        });
+        
+        // Feedback checkboxes
+        document.getElementById('feedback-audio').addEventListener('change', () => this.updateLiveReplayCode());
+        document.getElementById('feedback-visual').addEventListener('change', () => this.updateLiveReplayCode());
+        document.getElementById('feedback-haptic').addEventListener('change', () => this.updateLiveReplayCode());
     }
 
     updateTotalTargets() {
@@ -2022,6 +2155,260 @@ class DirectionalSkillsGame {
         document.getElementById('player-speed-value').textContent = labels[speed - 1] || 'Normal';
     }
 
+    updateLiveReplayCode() {
+        // Don't generate live codes during form editing to avoid confusion
+        // The final code will be generated when the game starts
+        const codeElement = document.getElementById('live-replay-code');
+        if (codeElement) {
+            codeElement.textContent = 'Will be generated when game starts';
+        }
+    }
+
+    getFormConfigForCode() {
+        // Get current form values to generate a consistent code
+        const stationary = parseInt(document.getElementById('target-static-count').value) || 0;
+        const moving = parseInt(document.getElementById('target-moving-count').value) || 0;
+        const flee = parseInt(document.getElementById('target-flee-count').value) || 0;
+        const bonus = parseInt(document.getElementById('target-bonus-count').value) || 0;
+        const hazard = parseInt(document.getElementById('target-hazard-count').value) || 0;
+        
+        const targetSize = document.querySelector('input[name="target-size"]:checked')?.value || 'medium';
+        const playerSpeed = parseInt(document.getElementById('player-speed').value) || 3;
+        const playerTrail = document.querySelector('input[name="player-trail"]:checked')?.value || 'short';
+        const inputMethod = document.querySelector('input[name="input-method"]:checked')?.value || 'discrete';
+        const inputBuffer = parseInt(document.getElementById('input-buffer').value) || 300;
+        const boundaries = document.querySelector('input[name="game-boundaries"]:checked')?.value || 'visual';
+        
+        const feedbackAudio = document.getElementById('feedback-audio').checked;
+        const feedbackVisual = document.getElementById('feedback-visual').checked;
+        const feedbackHaptic = document.getElementById('feedback-haptic').checked;
+        
+        const formConfig = {
+            targetCounts: { stationary, moving, flee, bonus, hazard },
+            targetSize,
+            playerSpeed,
+            playerTrail,
+            inputMethod,
+            inputBuffer,
+            boundaries,
+            feedback: { audio: feedbackAudio, visual: feedbackVisual, haptic: feedbackHaptic }
+        };
+        
+        console.log('🔍 getFormConfigForCode returning:', formConfig);
+        return formConfig;
+    }
+
+    generateReplayCodeFromConfig(config) {
+        // Create a more comprehensive replay code that encodes the configuration
+        console.log('🔍 generateReplayCodeFromConfig called with:', config);
+        
+        const configData = {
+            // Target configuration (ensure single digits 0-9)
+            st: Math.min(config.targetCounts.stationary, 9),    // Static targets
+            mv: Math.min(config.targetCounts.moving, 9),        // Moving targets
+            fl: Math.min(config.targetCounts.flee, 9),          // Flee targets  
+            bn: Math.min(config.targetCounts.bonus, 9),         // Bonus targets
+            hz: Math.min(config.targetCounts.hazard, 9),        // Hazard targets
+            
+            // Target and player settings (convert to numbers)
+            sz: this.encodeSize(config.targetSize),             // Size: 0-3
+            sp: config.playerSpeed,                             // Speed: 1-5
+            tr: this.encodeTrail(config.playerTrail),           // Trail: 0-1
+            
+            // Input and environment (convert to numbers)
+            im: this.encodeInputMethod(config.inputMethod),     // Input: 0-2
+            ib: Math.min(Math.floor(config.inputBuffer / 50), 9), // Buffer: 0-9
+            bd: this.encodeBoundaries(config.boundaries),       // Boundaries: 0-2
+            
+            // Feedback (binary flags)
+            fa: config.feedback.audio ? 1 : 0,
+            fv: config.feedback.visual ? 1 : 0,
+            fh: config.feedback.haptic ? 1 : 0
+        };
+        
+        console.log('🔍 Encoded configData:', configData);
+        
+        // Create a numeric string (all digits)
+        const configString = `${configData.st}${configData.mv}${configData.fl}${configData.bn}${configData.hz}` +
+                           `${configData.sz}${configData.sp}${configData.tr}${configData.im}` +
+                           `${configData.ib}${configData.bd}${configData.fa}${configData.fv}${configData.fh}`;
+        
+        console.log('🔢 Encoding config:', config, '→', configString);
+        
+        // Generate a hash for the visual part of the code
+        const hash = this.hashCodeToSeed(configString);
+        this.seedValue = hash;
+        
+        const colors = ['RED', 'BLUE', 'GREEN', 'YELLOW', 'PURPLE', 'ORANGE', 'PINK', 'CYAN'];
+        const shapes = ['CIRCLE', 'STAR', 'SQUARE', 'DIAMOND', 'HEART', 'TRIANGLE', 'ARROW', 'CROSS'];
+        
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const shape = shapes[Math.floor(Math.random() * shapes.length)];
+        
+        // Use the configString directly as the suffix to avoid base-36 conversion issues
+        return `${color}-${shape}-${configString}`;
+    }
+
+    // Encoding helper methods
+    encodeSize(size) {
+        const sizeMap = { 'small': 0, 'medium': 1, 'large': 2, 'extra-large': 3 };
+        return sizeMap[size] || 1;
+    }
+
+    encodeTrail(trail) {
+        const trailMap = { 'short': 0, 'long': 1 };
+        return trailMap[trail] || 0;
+    }
+
+    encodeInputMethod(method) {
+        const inputMap = { 'discrete': 0, 'continuous': 1, 'mouse': 2 };
+        return inputMap[method] || 0;
+    }
+
+    encodeBoundaries(boundaries) {
+        const boundariesMap = { 'none': 0, 'visual': 1, 'hard': 2 };
+        return boundariesMap[boundaries] || 0;
+    }
+
+    decodeReplayCode(replayCode) {
+        // Extract the configuration from a replay code
+        const parts = replayCode.split('-');
+        if (parts.length !== 3) {
+            console.warn('Invalid replay code format:', replayCode);
+            return null;
+        }
+        
+        try {
+            // Decode the configuration part - now it's directly the numeric string
+            const configString = parts[2];
+            
+            // Validate that the configString is exactly 14 digits
+            if (!/^\d{14}$/.test(configString)) {
+                console.warn('Invalid configuration string format:', configString);
+                return null;
+            }
+            
+            // Parse the configuration using the direct numeric encoding
+            const config = {
+                targetCounts: {
+                    stationary: parseInt(configString.charAt(0)) || 0,
+                    moving: parseInt(configString.charAt(1)) || 0,
+                    flee: parseInt(configString.charAt(2)) || 0,
+                    bonus: parseInt(configString.charAt(3)) || 0,
+                    hazard: parseInt(configString.charAt(4)) || 0
+                },
+                targetSize: this.decodeSize(parseInt(configString.charAt(5))),
+                playerSpeed: parseInt(configString.charAt(6)) || 3,
+                playerTrail: this.decodeTrail(parseInt(configString.charAt(7))),
+                inputMethod: this.decodeInputMethod(parseInt(configString.charAt(8))),
+                inputBuffer: parseInt(configString.charAt(9)) * 50 || 300,
+                boundaries: this.decodeBoundaries(parseInt(configString.charAt(10))),
+                feedback: {
+                    audio: configString.charAt(11) === '1',
+                    visual: configString.charAt(12) === '1',
+                    haptic: configString.charAt(13) === '1'
+                }
+            };
+            
+            console.log('🔍 Decoded config:', config, 'from string:', configString);
+            return config;
+        } catch (error) {
+            console.error('Error decoding replay code:', error);
+            return null;
+        }
+    }
+
+    decodeSize(num) {
+        const sizeMap = { 0: 'small', 1: 'medium', 2: 'large', 3: 'extra-large' };
+        return sizeMap[num] || 'medium';
+    }
+
+    decodeTrail(num) {
+        const trailMap = { 0: 'short', 1: 'long' };
+        return trailMap[num] || 'short';
+    }
+
+    decodeInputMethod(num) {
+        const inputMap = { 0: 'discrete', 1: 'continuous', 2: 'mouse' };
+        return inputMap[num] || 'discrete';
+    }
+
+    decodeBoundaries(num) {
+        const boundariesMap = { 0: 'none', 1: 'visual', 2: 'hard' };
+        return boundariesMap[num] || 'visual';
+    }
+
+    // Testing method to verify code accuracy
+    testReplayCodeAccuracy() {
+        console.log('🧪 Testing Replay Code Accuracy...');
+        
+        // Test various configurations
+        const testConfigs = [
+            // Basic config
+            {
+                targetCounts: { stationary: 5, moving: 2, flee: 1, bonus: 1, hazard: 0 },
+                targetSize: 'medium',
+                playerSpeed: 3,
+                playerTrail: 'short',
+                inputMethod: 'discrete',
+                inputBuffer: 300,
+                boundaries: 'visual',
+                feedback: { audio: true, visual: true, haptic: false }
+            },
+            // Advanced config
+            {
+                targetCounts: { stationary: 8, moving: 3, flee: 2, bonus: 2, hazard: 1 },
+                targetSize: 'small',
+                playerSpeed: 5,
+                playerTrail: 'long',
+                inputMethod: 'continuous',
+                inputBuffer: 150,
+                boundaries: 'hard',
+                feedback: { audio: false, visual: true, haptic: true }
+            }
+        ];
+        
+        testConfigs.forEach((config, index) => {
+            console.log(`\n📋 Test ${index + 1}:`);
+            console.log('Original config:', config);
+            
+            const code = this.generateReplayCodeFromConfig(config);
+            console.log('Generated code:', code);
+            
+            const decoded = this.decodeReplayCode(code);
+            console.log('Decoded config:', decoded);
+            
+            const matches = this.compareConfigs(config, decoded);
+            console.log('✅ Config match:', matches ? 'PASS' : 'FAIL');
+            
+            if (!matches) {
+                console.log('❌ Differences found!');
+            }
+        });
+    }
+
+    compareConfigs(config1, config2) {
+        if (!config2) return false;
+        
+        // Deep comparison of configurations
+        const compare = (obj1, obj2, path = '') => {
+            for (const key in obj1) {
+                const currentPath = path ? `${path}.${key}` : key;
+                if (typeof obj1[key] === 'object' && obj1[key] !== null) {
+                    if (!compare(obj1[key], obj2[key], currentPath)) {
+                        return false;
+                    }
+                } else if (obj1[key] !== obj2[key]) {
+                    console.log(`❌ Mismatch at ${currentPath}: ${obj1[key]} !== ${obj2[key]}`);
+                    return false;
+                }
+            }
+            return true;
+        };
+        
+        return compare(config1, config2);
+    }
+
     startNewSession() {
         // Save form values to session config
         this.saveSessionConfigFromForm();
@@ -2032,21 +2419,41 @@ class DirectionalSkillsGame {
         // Show game interface
         this.showGameInterface();
         
-        // Initialize new session with text seed (will be converted internally)
-        const seed = this.sessionConfig.seed || null;
-        this.initializeNewSession(seed);
+        // Initialize new session WITHOUT passing seed - let it use the form configuration
+        // The seed from the form is the live-generated code, not a code to decode
+        this.initializeNewSession();
         
         // Start session
         this.startSession();
         
         this.announceToScreenReader('New session started');
     }
+    
+    startReplaySession() {
+        // Get replay code from input
+        const replayCode = document.getElementById('replay-code-input').value.trim();
+        
+        if (!replayCode) {
+            alert('Please enter a replay code');
+            return;
+        }
+        
+        // Close modal
+        document.getElementById('replay-modal').close();
+        
+        // Initialize session with the replay code FIRST (before showing interface)
+        this.initializeNewSession(replayCode);
+        
+        // Show game interface (this will generate targets with the correct config)
+        this.showGameInterface();
+        
+        // Start session
+        this.startSession();
+        
+        this.announceToScreenReader(`Playing replay code: ${replayCode}`);
+    }
 
     saveSessionConfigFromForm() {
-        // Replay Code - store as text, will be converted to numeric when needed
-        const seedInput = document.getElementById('session-seed').value.trim();
-        this.sessionConfig.seed = seedInput || null;
-        
         // Target settings
         this.sessionConfig.targetCounts.stationary = parseInt(document.getElementById('target-static-count').value);
         this.sessionConfig.targetCounts.moving = parseInt(document.getElementById('target-moving-count').value);
@@ -2077,6 +2484,11 @@ class DirectionalSkillsGame {
         this.sessionConfig.feedback.visual = document.getElementById('feedback-visual').checked;
         this.sessionConfig.feedback.haptic = document.getElementById('feedback-haptic').checked;
         
+        // Generate the final replay code AFTER all configuration is set
+        this.sessionConfig.seed = this.generateReplayCodeFromConfig(this.sessionConfig);
+        console.log('🎮 Generated FINAL replay code from session config:', this.sessionConfig.seed);
+        console.log('🎮 Session config used for code generation:', this.sessionConfig);
+        
         // Update mouse events based on new configuration
         this.setupMouseEvents();
     }
@@ -2091,6 +2503,47 @@ class DirectionalSkillsGame {
         document.getElementById('results-hazard-targets').textContent = this.currentSession.hazardTargetsHit;
         document.getElementById('results-seed').textContent = this.currentSession.seed;
         
+        // Test replay code accuracy for this session
+        console.log('🎮 Session completed with code:', this.currentSession.seed);
+        const decoded = this.decodeReplayCode(this.currentSession.seed);
+        if (decoded) {
+            console.log('✅ Code decodes to configuration:', decoded);
+            console.log('🔄 Current session config:', {
+                targetCounts: this.sessionConfig.targetCounts,
+                targetSize: this.sessionConfig.targetSize,
+                playerSpeed: this.sessionConfig.playerSpeed,
+                playerTrail: this.sessionConfig.playerTrail,
+                inputMethod: this.sessionConfig.inputMethod,
+                inputBuffer: this.sessionConfig.inputBuffer,
+                boundaries: this.sessionConfig.boundaries,
+                feedback: this.sessionConfig.feedback
+            });
+            
+            const configMatches = this.compareConfigs(decoded, {
+                targetCounts: this.sessionConfig.targetCounts,
+                targetSize: this.sessionConfig.targetSize,
+                playerSpeed: this.sessionConfig.playerSpeed,
+                playerTrail: this.sessionConfig.playerTrail,
+                inputMethod: this.sessionConfig.inputMethod,
+                inputBuffer: this.sessionConfig.inputBuffer,
+                boundaries: this.sessionConfig.boundaries,
+                feedback: this.sessionConfig.feedback
+            });
+            
+            console.log(configMatches ? '✅ Configuration matches!' : '❌ Configuration mismatch detected!');
+        } else {
+            console.log('❌ Failed to decode replay code');
+        }
+        
+        // Show/hide and setup copy button
+        const copyButton = document.getElementById('copy-replay-code');
+        if (this.currentSession.seed) {
+            copyButton.style.display = 'inline-flex';
+            copyButton.onclick = () => this.copyReplayCode();
+        } else {
+            copyButton.style.display = 'none';
+        }
+        
         // Calculate completion percentage based only on core targets
         const coreCompletion = this.currentSession.totalCoreTargets > 0 ? 
             (this.currentSession.coreTargetsCollected / this.currentSession.totalCoreTargets) * 100 : 100;
@@ -2100,6 +2553,56 @@ class DirectionalSkillsGame {
         this.updateSessionHistoryDisplay();
         
         modal.showModal();
+    }
+    
+    copyReplayCode() {
+        const replayCode = this.currentSession.seed;
+        
+        // Try to use the modern clipboard API
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(replayCode).then(() => {
+                this.showCopyConfirmation();
+            }).catch(() => {
+                this.fallbackCopyToClipboard(replayCode);
+            });
+        } else {
+            this.fallbackCopyToClipboard(replayCode);
+        }
+    }
+    
+    fallbackCopyToClipboard(text) {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            this.showCopyConfirmation();
+        } catch (err) {
+            console.error('Failed to copy replay code:', err);
+            alert(`Copy failed. Replay code: ${text}`);
+        }
+        
+        document.body.removeChild(textArea);
+    }
+    
+    showCopyConfirmation() {
+        const button = document.getElementById('copy-replay-code');
+        const originalText = button.innerHTML;
+        
+        button.innerHTML = '<span class="material-icons" style="font-size: 16px;">check</span> Copied!';
+        button.style.backgroundColor = '#4caf50';
+        
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.style.backgroundColor = '';
+        }, 2000);
     }
 
     updateSessionHistoryDisplay() {
@@ -2127,88 +2630,7 @@ class DirectionalSkillsGame {
         }
     }
 
-    loadSessionPreset(presetName) {
-        if (!presetName) return;
-        
-        const presets = {
-            'first-steps': {
-                targetCounts: { stationary: 1, moving: 0, flee: 0, bonus: 0, hazard: 0 },
-                targetSize: 'extra-large',
-                playerSpeed: 1,
-                playerTrail: 'short',
-                inputMethods: { keyboard: true, mouseClick: false },
-                inputBuffer: 500,
-                boundaries: 'none',
-                feedback: { audio: true, visual: true, haptic: false }
-            },
-            'building-confidence': {
-                targetCounts: { stationary: 5, moving: 0, flee: 0, bonus: 1, hazard: 0 },
-                targetSize: 'large',
-                playerSpeed: 2,
-                playerTrail: 'short',
-                inputMethods: { keyboard: true, mouseClick: true },
-                inputBuffer: 400,
-                boundaries: 'visual',
-                feedback: { audio: true, visual: true, haptic: false }
-            },
-            'precision-practice': {
-                targetCounts: { stationary: 6, moving: 2, flee: 0, bonus: 2, hazard: 0 },
-                targetSize: 'medium',
-                playerSpeed: 3,
-                playerTrail: 'short',
-                inputMethods: { keyboard: true, mouseClick: true },
-                inputBuffer: 300,
-                boundaries: 'visual',
-                feedback: { audio: true, visual: true, haptic: false }
-            },
-            'dynamic-challenge': {
-                targetCounts: { stationary: 3, moving: 3, flee: 2, bonus: 2, hazard: 0 },
-                targetSize: 'medium',
-                playerSpeed: 3,
-                playerTrail: 'long',
-                inputMethods: { keyboard: true, mouseClick: true },
-                inputBuffer: 200,
-                boundaries: 'visual',
-                feedback: { audio: true, visual: true, haptic: false }
-            },
-            'strategic-navigation': {
-                targetCounts: { stationary: 4, moving: 2, flee: 1, bonus: 3, hazard: 2 },
-                targetSize: 'medium',
-                playerSpeed: 3,
-                playerTrail: 'short',
-                inputMethods: { keyboard: true, mouseClick: true },
-                inputBuffer: 250,
-                boundaries: 'visual',
-                feedback: { audio: true, visual: true, haptic: false }
-            },
-            'intensive-practice': {
-                targetCounts: { stationary: 8, moving: 0, flee: 0, bonus: 2, hazard: 0 },
-                targetSize: 'small',
-                playerSpeed: 4,
-                playerTrail: 'short',
-                inputMethods: { keyboard: true, mouseClick: true },
-                inputBuffer: 150,
-                boundaries: 'visual',
-                feedback: { audio: true, visual: true, haptic: false }
-            }
-        };
-        
-        if (presets[presetName]) {
-            this.sessionConfig = { ...this.sessionConfig, ...presets[presetName] };
-            this.loadSessionConfigToForm();
-        }
-    }
 
-    saveSessionPreset() {
-        const presetName = prompt('Enter a name for this preset:');
-        if (presetName) {
-            this.saveSessionConfigFromForm();
-            const savedPresets = JSON.parse(localStorage.getItem('sessionPresets') || '{}');
-            savedPresets[presetName] = { ...this.sessionConfig };
-            localStorage.setItem('sessionPresets', JSON.stringify(savedPresets));
-            this.announceToScreenReader(`Preset "${presetName}" saved`);
-        }
-    }
     
     // Utility Methods
     toggleSound() {
@@ -2236,13 +2658,7 @@ class DirectionalSkillsGame {
         }
     }
     
-    // New UI Control Methods
-    startQuickPractice() {
-        // Start a quick practice session with default settings
-        this.initializeNewSession();
-        this.showGameInterface();
-        this.startSession();
-    }
+
     
     showGameInterface() {
         // Hide main menu and show game interface
@@ -2252,8 +2668,13 @@ class DirectionalSkillsGame {
         // Ensure canvas is properly sized with a small delay to allow layout
         setTimeout(() => {
             this.setupCanvas();
-            // Regenerate targets after canvas is properly sized
-            this.generateSessionTargets();
+            
+            // Generate targets if they haven't been generated yet (due to small canvas during init)
+            if (this.targets.length === 0) {
+                console.log('🎯 Canvas now properly sized, generating targets');
+                this.generateSessionTargets();
+                // Player position is set inside generateSessionTargets()
+            }
         }, 50);
         
         // Focus canvas for keyboard input
@@ -2436,9 +2857,13 @@ class DirectionalSkillsGame {
     }
     
     repositionPlayerAfterResize() {
-        // If we have a seeded session, recalculate seeded position for new canvas size
-        if (this.sessionConfig.seed && this.gameState === 'playing') {
-            this.setSeededPlayerPosition();
+        // For seeded sessions, don't change player position to maintain consistency
+        if (this.currentSession && this.currentSession.seed && this.gameState === 'playing') {
+            console.log('🎯 Maintaining seeded player position during resize');
+            // Just ensure player is still on screen with current position
+            const margin = this.player.size;
+            this.player.x = Math.max(margin, Math.min(this.canvas.width - margin, this.player.x));
+            this.player.y = Math.max(margin, Math.min(this.canvas.height - margin, this.player.y));
         } else {
             // Otherwise, just keep player on screen
             const margin = this.player.size;

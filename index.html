@@ -25,21 +25,21 @@
         </div>
         
         <div class="menu-cards" role="navigation" aria-label="Main menu options">
-            <button class="menu-card primary-card" id="start-practice-btn" 
-                    aria-label="Start practice session">
-                <span class="material-icons card-icon">play_circle</span>
+            <button class="menu-card primary-card" id="configure-session-btn" 
+                    aria-label="Create a new game with custom settings">
+                <span class="material-icons card-icon">add_circle</span>
                 <div class="card-content">
-                    <h2 class="card-title">Start Practice</h2>
-                    <p class="card-description">Begin a directional skills session</p>
+                    <h2 class="card-title">Create Game</h2>
+                    <p class="card-description">Design your own challenge</p>
                 </div>
             </button>
             
-            <button class="menu-card" id="configure-session-btn" 
-                    aria-label="Configure practice session">
-                <span class="material-icons card-icon">tune</span>
+            <button class="menu-card" id="play-replay-btn" 
+                    aria-label="Play a game using a replay code">
+                <span class="material-icons card-icon">replay</span>
                 <div class="card-content">
-                    <h2 class="card-title">Configure Session</h2>
-                    <p class="card-description">Customize targets and settings</p>
+                    <h2 class="card-title">Play Replay Code</h2>
+                    <p class="card-description">Enter a code to play the same challenge</p>
                 </div>
             </button>
             
@@ -166,8 +166,8 @@
     <dialog class="modal practice-modal" id="session-modal" aria-labelledby="session-title">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="session-title">Session Setup</h2>
-                <button class="modal-close" aria-label="Close session setup">
+                <h2 id="session-title">Create Your Game</h2>
+                <button class="modal-close" aria-label="Close game creation">
                     <span class="material-icons">close</span>
                 </button>
             </div>
@@ -176,11 +176,7 @@
                     <fieldset>
                         <legend>Session Configuration</legend>
                         
-                        <div class="form-group">
-                            <label for="session-seed">Replay Code (to repeat the same session):</label>
-                            <input type="text" id="session-seed" placeholder="e.g., morning-practice, blue-circles, 123">
-                            <small class="field-help">Use words, phrases, or numbers to create sessions you can repeat exactly</small>
-                        </div>
+
                         
                         <div class="form-group">
                             <label>Target Configuration:</label>
@@ -314,22 +310,43 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <div class="preset-controls">
-                    <select id="practice-presets">
-                        <option value="">Choose a preset...</option>
-                        <option value="first-steps">First Steps (Beginner)</option>
-                        <option value="building-confidence">Building Confidence</option>
-                        <option value="precision-practice">Precision Practice (with Time Bonus)</option>
-                        <option value="dynamic-challenge">Dynamic Challenge</option>
-                        <option value="strategic-navigation">Strategic Navigation (Hazards + Rewards)</option>
-                        <option value="intensive-practice">Intensive Practice (High Volume)</option>
-                    </select>
-                    <button class="btn btn-secondary" id="save-preset">Save as Preset</button>
+                <div class="replay-code-preview">
+                    <small class="field-help">Game Code: <strong id="live-replay-code">BLUE-STAR-1234</strong></small>
+                    <small class="field-help-sub">This code will be generated for sharing with classmates</small>
                 </div>
                 <div class="action-controls">
-                    <button class="btn btn-primary" id="start-session">Start Session</button>
+                    <button class="btn btn-primary" id="start-session">Create Game</button>
                     <button class="btn btn-secondary" id="cancel-session">Cancel</button>
                 </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Replay Code Entry Modal -->
+    <dialog class="modal" id="replay-modal" aria-labelledby="replay-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="replay-title">Play Replay Code</h2>
+                <button class="modal-close" aria-label="Close replay code entry">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form class="replay-form">
+                    <div class="form-group">
+                        <label for="replay-code-input">Enter Replay Code:</label>
+                        <input type="text" id="replay-code-input" placeholder="e.g., BLUE-CIRCLE-4K2P" required>
+                        <small class="field-help">Enter the exact replay code to play the same challenge. You can get codes from completed games.</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <p><strong>Note:</strong> Player settings (movement speed, input method, trail) can still be customized - only the target layout will match the original challenge.</p>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="start-replay">Play Challenge</button>
+                <button class="btn btn-secondary" id="cancel-replay">Cancel</button>
             </div>
         </div>
     </dialog>
@@ -365,8 +382,9 @@
                 <section>
                     <h3>Navigation</h3>
                     <ul>
-                        <li><strong>Main Menu:</strong> Click "Start Practice" for quick session with default settings</li>
-                        <li><strong>Custom Session:</strong> Click "Configure Session" to customize targets and difficulty</li>
+                        <li><strong>Create Game:</strong> Design your own challenge with custom targets and difficulty</li>
+                        <li><strong>Play Replay Code:</strong> Enter a code to play the exact same challenge as someone else</li>
+                        <li><strong>Replay Codes:</strong> Every game generates a unique code you can share with classmates</li>
                         <li><strong>Pause Anytime:</strong> Press ESC to open pause menu with resume/quit options</li>
                         <li><strong>Clean Interface:</strong> No distracting menus during practice - just you and the targets</li>
                     </ul>
@@ -428,6 +446,10 @@
                     <div class="stat-card">
                         <h3>Replay Code</h3>
                         <div class="stat-value" id="results-seed">-</div>
+                        <button class="btn btn-small" id="copy-replay-code" style="margin-top: 8px; display: none;">
+                            <span class="material-icons" style="font-size: 16px;">content_copy</span>
+                            Copy Code
+                        </button>
                     </div>
                 </div>
                 
