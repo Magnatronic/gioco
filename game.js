@@ -425,9 +425,13 @@ class DirectionalSkillsGame {
         this.canvas.style.width = '100%';
         this.canvas.style.height = '100%';
         
-        // Set player initial position (center by default)
-        this.player.x = containerWidth / 2;
-        this.player.y = containerHeight / 2;
+        // Don't automatically set player position here - let seeded positioning handle it
+        // Only set center position if player position is not yet initialized
+        if (this.player.x === 0 && this.player.y === 0) {
+            this.player.x = containerWidth / 2;
+            this.player.y = containerHeight / 2;
+            console.log('🎯 Set initial default player position (center):', Math.round(this.player.x), ',', Math.round(this.player.y));
+        }
     }
     
     setSeededPlayerPosition() {
@@ -2201,6 +2205,7 @@ class DirectionalSkillsGame {
     generateReplayCodeFromConfig(config) {
         // Create a more comprehensive replay code that encodes the configuration
         console.log('🔍 generateReplayCodeFromConfig called with:', config);
+        console.log('🔍 config.targetSize specifically:', config.targetSize);
         
         const configData = {
             // Target configuration (ensure single digits 0-9)
@@ -2252,22 +2257,24 @@ class DirectionalSkillsGame {
     // Encoding helper methods
     encodeSize(size) {
         const sizeMap = { 'small': 0, 'medium': 1, 'large': 2, 'extra-large': 3 };
-        return sizeMap[size] || 1;
+        const result = sizeMap.hasOwnProperty(size) ? sizeMap[size] : 1;
+        console.log('🔍 encodeSize called with:', size, '→', result);
+        return result;
     }
 
     encodeTrail(trail) {
         const trailMap = { 'short': 0, 'long': 1 };
-        return trailMap[trail] || 0;
+        return trailMap.hasOwnProperty(trail) ? trailMap[trail] : 0;
     }
 
     encodeInputMethod(method) {
         const inputMap = { 'discrete': 0, 'continuous': 1, 'mouse': 2 };
-        return inputMap[method] || 0;
+        return inputMap.hasOwnProperty(method) ? inputMap[method] : 0;
     }
 
     encodeBoundaries(boundaries) {
         const boundariesMap = { 'none': 0, 'visual': 1, 'hard': 2 };
-        return boundariesMap[boundaries] || 0;
+        return boundariesMap.hasOwnProperty(boundaries) ? boundariesMap[boundaries] : 0;
     }
 
     decodeReplayCode(replayCode) {
