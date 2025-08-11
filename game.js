@@ -247,10 +247,12 @@ class DirectionalSkillsGame {
         this.currentSession.totalTime = this.calculateSessionTime();
         
         // Add to session history
-        this.sessionHistory.push({
+        const sessionToSave = {
             ...this.currentSession,
             config: { ...this.sessionConfig }
-        });
+        };
+        console.log('💾 Saving session with seed:', sessionToSave.seed);
+        this.sessionHistory.push(sessionToSave);
         this.saveSessionHistory();
         
         this.gameState = 'completed';
@@ -1990,13 +1992,13 @@ class DirectionalSkillsGame {
             const dateStr = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
             
             return `
-                <div class="session-item">
+                <div class="session-item" data-session-index="${index}">
                     <div class="session-time">${timeStr}</div>
                     <div class="session-details">
                         <div class="session-replay-info">
                             <div class="replay-code">${replayCode}</div>
                             <div class="session-date">${dateStr}</div>
-                            <button class="copy-replay-btn" onclick="game.copyReplayCode('${replayCode}')" 
+                            <button class="copy-replay-btn" data-replay-code="${replayCode}" 
                                     title="Copy replay code">
                                 Copy
                             </button>
@@ -2005,6 +2007,16 @@ class DirectionalSkillsGame {
                 </div>
             `;
         }).join('');
+        
+        // Add event listeners for copy buttons
+        const copyButtons = historyContainer.querySelectorAll('.copy-replay-btn');
+        copyButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                const replayCode = button.getAttribute('data-replay-code');
+                this.copyReplayCode(replayCode);
+            });
+        });
     }
     
     copyReplayCode(replayCode) {
@@ -2734,7 +2746,7 @@ class DirectionalSkillsGame {
         
         // Setup copy button
         const copyButton = document.getElementById('copy-replay-code');
-        copyButton.onclick = () => this.copyReplayCode();
+        copyButton.onclick = () => this.copyCurrentSessionReplayCode();
         
         modal.showModal();
     }
@@ -2780,7 +2792,7 @@ class DirectionalSkillsGame {
         return { isRecord: false, message: "" };
     }
     
-    copyReplayCode() {
+    copyCurrentSessionReplayCode() {
         const replayCode = this.currentSession.seed;
         
         // Try to use the modern clipboard API
