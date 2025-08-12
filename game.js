@@ -113,9 +113,18 @@ class DirectionalSkillsGame {
         // Start with main menu visible
         this.showMainMenu();
         
-        // Start game loop
-    // If a global SceneManager/Engine is present, we can later switch to it
-    this.gameLoop();
+        // Start game loop only if no external engine is planned to drive updates
+        // Detect bootstrap: presence of Engine + SceneManager and not disabled via ?engine=off
+        const urlParams = new URLSearchParams(window.location.search);
+        const externalEngineDisabled = urlParams.get('engine') === 'off';
+        const externalEngineAvailable = !!(window.Engine && window.SceneManager);
+        if (!externalEngineAvailable || externalEngineDisabled) {
+            // Fall back to legacy loop
+            this.gameLoop();
+        } else {
+            // External engine will take over via GameScene; avoid even the first legacy tick
+            window.__SCENE_ENGINE_ACTIVE__ = true;
+        }
         
         // Update UI
         this.updateUI();
