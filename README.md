@@ -56,6 +56,7 @@ This therapeutic game helps students with physical and learning difficulties dev
 - **Click-to-Move**: Click anywhere to move your character to that position
 - **Switch Control**: Compatible with single and dual switch inputs (F1/F2 test keys; scanning overlay included)
 - **Eye-Gaze**: Experimental placeholder with dwell-time concept (no hardware integration yet)
+ - Quick test: add `?input=switch` (or `keyboard`, `eyeGaze`, `touch`) to the URL to preselect the input method.
 - **Ctrl + H**: Context-sensitive help
 - **H**: Show help information
 - **M**: Mute/unmute sounds

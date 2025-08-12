@@ -107,6 +107,29 @@ class DirectionalSkillsGame {
                 // Default to keyboard on load; settings panel can change this later
                 this.inputBridge.switchInputMethod('keyboard');
             }
+            // Reflect current method in UI
+            const updateInputLabel = () => {
+                const el = document.getElementById('current-input-method');
+                if (el && this.inputBridge) el.textContent = this.inputBridge.activeMethod ? this.inputBridge.activeMethod : 'Keyboard';
+            };
+            updateInputLabel();
+            this.inputBridge.on('system', (evt) => {
+                if (evt.data && evt.data.type === 'inputMethodChanged') updateInputLabel();
+            });
+            // URL param support: ?input=keyboard|switch|eyeGaze|touch
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const method = params.get('input');
+                const allowed = ['keyboard', 'switch', 'eyeGaze', 'touch'];
+                if (method && allowed.includes(method)) {
+                    if (!this.useUniversalInput) {
+                        this.useUniversalInput = true;
+                        this.enableUniversalInputBridge();
+                    }
+                    this.inputBridge.switchInputMethod(method);
+                    updateInputLabel();
+                }
+            } catch (e) {}
         }
         
         // Initialize session but don't start
