@@ -99,11 +99,13 @@ class DirectionalSkillsGame {
         this.setupAccessibility();
 
         // Optional: Universal Input Manager (off by default for safety)
-    this.useUniversalInput = false;
+        this.useUniversalInput = true;
         if (window.UniversalInputManager) {
             this.inputBridge = new window.UniversalInputManager();
             if (this.useUniversalInput) {
                 this.enableUniversalInputBridge();
+                // Default to keyboard on load; settings panel can change this later
+                this.inputBridge.switchInputMethod('keyboard');
             }
         }
         
@@ -331,6 +333,9 @@ class DirectionalSkillsGame {
         
         this.gameState = 'completed';
         this.showSessionResults();
+        if (window.sceneManager && window.ResultsScene) {
+            try { window.sceneManager.switch('results'); } catch (e) {}
+        }
         
         // Play completion sound
         if (this.sounds.levelComplete) this.sounds.levelComplete();
@@ -2915,6 +2920,9 @@ class DirectionalSkillsGame {
         // Show main menu and hide game interface
         document.getElementById('main-menu').style.display = 'flex';
         document.getElementById('game-interface').style.display = 'none';
+        if (window.sceneManager && window.MenuScene) {
+            try { window.sceneManager.switch('menu'); } catch (e) {}
+        }
         
         // Reset game state
         this.gameState = 'menu';
