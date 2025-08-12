@@ -725,10 +725,16 @@ class DirectionalSkillsGame {
             // Restart the game with the same replay code
             this.initializeNewSession(this.currentSession.seed);
             this.startSession();
+            if (window.sceneManager) {
+                try { window.sceneManager.switch('main'); } catch (e) {}
+            }
         });
         newSession.addEventListener('click', () => {
             resultsModal.close();
             this.openSessionSetup();
+            if (window.sceneManager) {
+                try { window.sceneManager.switch('menu'); } catch (e) {}
+            }
         });
         closeResults.addEventListener('click', () => {
             resultsModal.close();
