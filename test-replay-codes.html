@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Replay Code Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .code-example {
+            font-family: monospace;
+            background: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 8px 0;
+            display: inline-block;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Replay Code Test Suite</h1>
+    <p>Testing the new numbers-only replay code format with backward compatibility.</p>
+
+    <div class="test-section">
+        <h2>📊 Test Results</h2>
+        <div id="test-results"></div>
+        <button onclick="runTests()">Run All Tests</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div class="test-section">
+        <h2>🔧 Manual Testing</h2>
+        <p>Test decode functionality with your own codes:</p>
+        <input type="text" id="manual-code" placeholder="Enter replay code..." style="width: 300px; padding: 8px; margin: 5px;">
+        <button onclick="testManualCode()">Test Code</button>
+        <div id="manual-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📝 Example Codes</h2>
+        <h3>New Format (Numbers Only):</h3>
+        <div class="code-example">10000130060110</div>
+        <div class="code-example">54321243211100</div>
+        <div class="code-example">99999999999999</div>
+        
+        <h3>Legacy Format (COLOR-SHAPE-NUMBERS):</h3>
+        <div class="code-example">RED-ARROW-10000130060110</div>
+        <div class="code-example">BLUE-CIRCLE-54321243211100</div>
+        <div class="code-example">GREEN-STAR-99999999999999</div>
+    </div>
+
+    <script src="game.js"></script>
+    <script>
+        // Initialize game instance for testing
+        const testGame = new DirectionalSkillsGame();
+        
+        // Test cases
+        const testCases = [
+            {
+                name: "New Format - Basic Configuration",
+                code: "10000130060110",
+                expectedValid: true,
+                description: "Numbers-only format with basic config"
+            },
+            {
+                name: "Legacy Format - Same Configuration",
+                code: "RED-ARROW-10000130060110",
+                expectedValid: true,
+                description: "Old COLOR-SHAPE-NUMBERS format"
+            },
+            {
+                name: "New Format - Complex Configuration",
+                code: "54321243211100",
+                expectedValid: true,
+                description: "Numbers-only with complex settings"
+            },
+            {
+                name: "Legacy Format - Complex Configuration",
+                code: "BLUE-CIRCLE-54321243211100",
+                expectedValid: true,
+                description: "Legacy format with complex settings"
+            },
+            {
+                name: "Invalid - Wrong Length",
+                code: "123456789",
+                expectedValid: false,
+                description: "Too short (9 digits instead of 14)"
+            },
+            {
+                name: "Invalid - Contains Letters",
+                code: "1234567890ABCD",
+                expectedValid: false,
+                description: "Contains non-numeric characters"
+            },
+            {
+                name: "Invalid - Wrong Legacy Format",
+                code: "RED-ARROW",
+                expectedValid: false,
+                description: "Missing numeric part in legacy format"
+            },
+            {
+                name: "Edge Case - All Zeros",
+                code: "00000000000000",
+                expectedValid: true,
+                description: "Minimum configuration (all zeros)"
+            },
+            {
+                name: "Edge Case - All Nines",
+                code: "99999999999999",
+                expectedValid: true,
+                description: "Maximum configuration (all nines)"
+            }
+        ];
+
+        function runTests() {
+            const resultsDiv = document.getElementById('test-results');
+            resultsDiv.innerHTML = '<h3>Running Tests...</h3>';
+            
+            let passed = 0;
+            let total = testCases.length;
+            let results = [];
+
+            testCases.forEach((test, index) => {
+                try {
+                    const decoded = testGame.decodeReplayCode(test.code);
+                    const isValid = decoded !== null;
+                    const testPassed = isValid === test.expectedValid;
+                    
+                    if (testPassed) passed++;
+                    
+                    results.push(`
+                        <div class="result ${testPassed ? 'success' : 'error'}">
+                            <strong>${test.name}</strong> ${testPassed ? '✅ PASS' : '❌ FAIL'}<br>
+                            <small>Code: <code>${test.code}</code></small><br>
+                            <small>Expected: ${test.expectedValid ? 'Valid' : 'Invalid'}, Got: ${isValid ? 'Valid' : 'Invalid'}</small><br>
+                            <small>${test.description}</small>
+                            ${isValid && decoded ? `<br><small>Decoded: ${JSON.stringify(decoded, null, 2).slice(0, 100)}...</small>` : ''}
+                        </div>
+                    `);
+                } catch (error) {
+                    results.push(`
+                        <div class="result error">
+                            <strong>${test.name}</strong> ❌ ERROR<br>
+                            <small>Code: <code>${test.code}</code></small><br>
+                            <small>Error: ${error.message}</small>
+                        </div>
+                    `);
+                }
+            });
+
+            resultsDiv.innerHTML = `
+                <h3>Test Summary: ${passed}/${total} passed</h3>
+                ${results.join('')}
+            `;
+        }
+
+        function testManualCode() {
+            const code = document.getElementById('manual-code').value.trim();
+            const resultDiv = document.getElementById('manual-result');
+            
+            if (!code) {
+                resultDiv.innerHTML = '<div class="result error">Please enter a replay code</div>';
+                return;
+            }
+
+            try {
+                const decoded = testGame.decodeReplayCode(code);
+                if (decoded) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <strong>✅ Valid Code!</strong><br>
+                            <small>Code: <code>${code}</code></small><br>
+                            <pre>${JSON.stringify(decoded, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <strong>❌ Invalid Code</strong><br>
+                            <small>Code: <code>${code}</code></small><br>
+                            <small>The code format is not recognized or contains invalid characters.</small>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>❌ Error</strong><br>
+                        <small>Code: <code>${code}</code></small><br>
+                        <small>Error: ${error.message}</small>
+                    </div>
+                `;
+            }
+        }
+
+        function clearResults() {
+            document.getElementById('test-results').innerHTML = '';
+            document.getElementById('manual-result').innerHTML = '';
+            document.getElementById('manual-code').value = '';
+        }
+
+        // Run tests automatically on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(runTests, 500);
+        });
+    </script>
+</body>
+</html>
