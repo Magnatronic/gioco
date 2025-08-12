@@ -518,12 +518,38 @@
     <!-- Core Scripts (architecture scaffolding) -->
     <script src="core/events.js"></script>
     <script src="core/scene-manager.js"></script>
+    <script src="core/engine.js"></script>
     <script src="core/replay-code.js"></script>
+    <script src="core/game-scene.js"></script>
     <script src="mini-games/registry.js"></script>
     <script src="mini-games/directional-practice.js"></script>
 
     <!-- Game Script -->
-    <script src="game.js"></script>
+        <script src="game.js"></script>
+        <script>
+            // Bootstrap the SceneManager + Engine and mount the main game scene once DOM is ready
+            window.addEventListener('DOMContentLoaded', function () {
+                if (!window.SceneManager || !window.Engine || !window.GameScene) return;
+                try {
+                    var canvas = document.getElementById('game-canvas');
+                    var ctx = canvas ? canvas.getContext('2d') : null;
+                    if (!ctx) return;
+                    window.sceneManager = window.sceneManager || new window.SceneManager();
+                    window.engine = window.engine || new window.Engine(ctx);
+                    // Register and switch to main scene wrapping existing game instance
+                    if (!window._mainSceneRegistered) {
+                        window.sceneManager.register('main', new window.GameScene());
+                        window._mainSceneRegistered = true;
+                    }
+                    window.sceneManager.switch('main');
+                    if (!window.engine.running) {
+                        window.engine.start(window.sceneManager);
+                    }
+                } catch (e) {
+                    console.warn('Engine bootstrap failed:', e);
+                }
+            });
+        </script>
 </body>
 </html>< ! - -   T r i g g e r   P a g e s   d e p l o y m e n t   - - > 
  

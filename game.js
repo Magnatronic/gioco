@@ -5,6 +5,8 @@
 
 class DirectionalSkillsGame {
     constructor() {
+    // Debug logging flag
+    this.debug = false;
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
         this.gameState = 'menu'; // menu, playing, paused, completed
@@ -103,7 +105,8 @@ class DirectionalSkillsGame {
         this.showMainMenu();
         
         // Start game loop
-        this.gameLoop();
+    // If a global SceneManager/Engine is present, we can later switch to it
+    this.gameLoop();
         
         // Update UI
         this.updateUI();
@@ -111,7 +114,12 @@ class DirectionalSkillsGame {
         
         // Make testing available globally for easy debugging
         window.testReplaySystem = () => this.testReplayCodeAccuracy();
-        console.log('🧪 To test replay code accuracy, run: testReplaySystem()');
+        this._log('🧪 To test replay code accuracy, run: testReplaySystem()');
+    }
+
+    // Guarded logger
+    _log(...args) {
+        if (this.debug) console.log(...args);
     }
     
     showMainMenu() {
@@ -1367,9 +1375,12 @@ class DirectionalSkillsGame {
     }
     
     gameLoop() {
-        this.update();
-        this.render();
-        requestAnimationFrame(() => this.gameLoop());
+        // Keep existing loop unless an external Engine is driving updates
+        if (!window.__SCENE_ENGINE_ACTIVE__) {
+            this.update();
+            this.render();
+            requestAnimationFrame(() => this.gameLoop());
+        }
     }
     
     update() {
@@ -2407,159 +2418,33 @@ class DirectionalSkillsGame {
     }
 
     generateReplayCodeFromConfig(config) {
-        // Create a more comprehensive replay code that encodes the configuration
-        console.log('🔍 generateReplayCodeFromConfig called with:', config);
-        console.log('🔍 config.targetSize specifically:', config.targetSize);
-        
-        const configData = {
-            // Target configuration (ensure single digits 0-9)
-            st: Math.min(config.targetCounts.stationary, 9),    // Static targets
-            mv: Math.min(config.targetCounts.moving, 9),        // Moving targets
-            fl: Math.min(config.targetCounts.flee, 9),          // Flee targets  
-            bn: Math.min(config.targetCounts.bonus, 9),         // Bonus targets
-            hz: Math.min(config.targetCounts.hazard, 9),        // Hazard targets
-            
-            // Target and player settings (convert to numbers)
-            sz: this.encodeSize(config.targetSize),             // Size: 0-3
-            sp: config.playerSpeed,                             // Speed: 1-5
-            tr: this.encodeTrail(config.playerTrail),           // Trail: 0-1
-            
-            // Input and environment (convert to numbers)
-            im: this.encodeInputMethod(config.inputMethod),     // Input: 0-2
-            ib: Math.min(Math.floor(config.inputBuffer / 50), 9), // Buffer: 0-9
-            bd: this.encodeBoundaries(config.boundaries),       // Boundaries: 0-2
-            
-            // Feedback (binary flags)
-            fa: config.feedback.audio ? 1 : 0,
-            fv: config.feedback.visual ? 1 : 0,
-            fh: config.feedback.haptic ? 1 : 0
-        };
-        
-        console.log('🔍 Encoded configData:', configData);
-        
-        // Create a numeric string (all digits)
-        const configString = `${configData.st}${configData.mv}${configData.fl}${configData.bn}${configData.hz}` +
-                           `${configData.sz}${configData.sp}${configData.tr}${configData.im}` +
-                           `${configData.ib}${configData.bd}${configData.fa}${configData.fv}${configData.fh}`;
-        
-        console.log('🔢 Encoding config:', config, '→', configString);
-        
-        // Generate a hash for the visual part of the code
-        const hash = this.hashCodeToSeed(configString);
-        this.seedValue = hash;
-        
-        const colors = ['RED', 'BLUE', 'GREEN', 'YELLOW', 'PURPLE', 'ORANGE', 'PINK', 'CYAN'];
-        const shapes = ['CIRCLE', 'STAR', 'SQUARE', 'DIAMOND', 'HEART', 'TRIANGLE', 'ARROW', 'CROSS'];
-        
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        const shape = shapes[Math.floor(Math.random() * shapes.length)];
-        
-        // Return just the configString for shorter codes
-        // Keep color-shape generation for backward compatibility logging
-        console.log('🎨 Generated visual elements:', `${color}-${shape}`, 'but using numbers-only format');
-        return configString;
+        // Delegate to core ReplayCode util
+        const code = window.ReplayCode ? window.ReplayCode.generateFromConfig(config) : null;
+        if (!code) {
+            console.warn('ReplayCode.generateFromConfig not available; falling back to default seed');
+            return '00000000000000';
+        }
+        this._log('🔢 Encoding config via ReplayCode:', config, '→', code);
+        return code;
     }
 
     // Encoding helper methods
-    encodeSize(size) {
-        const sizeMap = { 'small': 0, 'medium': 1, 'large': 2, 'extra-large': 3 };
-        const result = sizeMap.hasOwnProperty(size) ? sizeMap[size] : 1;
-        console.log('🔍 encodeSize called with:', size, '→', result);
-        return result;
-    }
-
-    encodeTrail(trail) {
-        const trailMap = { 'short': 0, 'long': 1 };
-        return trailMap.hasOwnProperty(trail) ? trailMap[trail] : 0;
-    }
-
-    encodeInputMethod(method) {
-        const inputMap = { 'discrete': 0, 'continuous': 1, 'mouse': 2 };
-        return inputMap.hasOwnProperty(method) ? inputMap[method] : 0;
-    }
-
-    encodeBoundaries(boundaries) {
-        const boundariesMap = { 'none': 0, 'visual': 1, 'hard': 2 };
-        return boundariesMap.hasOwnProperty(boundaries) ? boundariesMap[boundaries] : 0;
-    }
+    // Encoding helpers now live in core/replay-code.js
 
     decodeReplayCode(replayCode) {
-        // Extract the configuration from a replay code
-        // Support both old format (COLOR-SHAPE-NUMBERS) and new format (NUMBERS only)
-        let configString;
-        
-        if (replayCode.includes('-')) {
-            // Old format: COLOR-SHAPE-NUMBERS
-            const parts = replayCode.split('-');
-            if (parts.length !== 3) {
-                console.warn('Invalid replay code format:', replayCode);
-                return null;
-            }
-            configString = parts[2];
-            console.log('🔄 Using legacy format code:', replayCode);
-        } else {
-            // New format: NUMBERS only
-            configString = replayCode;
-            console.log('🔢 Using numbers-only format code:', replayCode);
-        }
-        
+        // Use central decoder (supports legacy and new formats)
         try {
-            // Validate that the configString is exactly 14 digits
-            if (!/^\d{14}$/.test(configString)) {
-                console.warn('Invalid configuration string format:', configString);
-                return null;
-            }
-            
-            // Parse the configuration using the direct numeric encoding
-            const config = {
-                targetCounts: {
-                    stationary: parseInt(configString.charAt(0)) || 0,
-                    moving: parseInt(configString.charAt(1)) || 0,
-                    flee: parseInt(configString.charAt(2)) || 0,
-                    bonus: parseInt(configString.charAt(3)) || 0,
-                    hazard: parseInt(configString.charAt(4)) || 0
-                },
-                targetSize: this.decodeSize(parseInt(configString.charAt(5))),
-                playerSpeed: parseInt(configString.charAt(6)) || 3,
-                playerTrail: this.decodeTrail(parseInt(configString.charAt(7))),
-                inputMethod: this.decodeInputMethod(parseInt(configString.charAt(8))),
-                inputBuffer: parseInt(configString.charAt(9)) * 50 || 300,
-                boundaries: this.decodeBoundaries(parseInt(configString.charAt(10))),
-                feedback: {
-                    audio: configString.charAt(11) === '1',
-                    visual: configString.charAt(12) === '1',
-                    haptic: configString.charAt(13) === '1'
-                }
-            };
-            
-            console.log('🔍 Decoded config:', config, 'from string:', configString);
-            return config;
+            const decoded = window.ReplayCode ? window.ReplayCode.decode(replayCode) : null;
+            if (!decoded) return null;
+            this._log('🔍 Decoded via ReplayCode:', decoded, 'from:', replayCode);
+            return decoded;
         } catch (error) {
             console.error('Error decoding replay code:', error);
             return null;
         }
     }
 
-    decodeSize(num) {
-        const sizeMap = { 0: 'small', 1: 'medium', 2: 'large', 3: 'extra-large' };
-        return sizeMap[num] || 'medium';
-    }
-
-    decodeTrail(num) {
-        const trailMap = { 0: 'short', 1: 'long' };
-        return trailMap[num] || 'short';
-    }
-
-    decodeInputMethod(num) {
-        const inputMap = { 0: 'discrete', 1: 'continuous', 2: 'mouse' };
-        return inputMap[num] || 'discrete';
-    }
-
-    decodeBoundaries(num) {
-        const boundariesMap = { 0: 'none', 1: 'visual', 2: 'hard' };
-        // Default to 'none' to align with encode defaults
-        return boundariesMap[num] || 'none';
-    }
+    // Decoding helpers now live in core/replay-code.js
 
     // Testing method to verify code accuracy
     testReplayCodeAccuracy() {
