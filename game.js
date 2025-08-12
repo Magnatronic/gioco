@@ -99,7 +99,7 @@ class DirectionalSkillsGame {
         this.setupAccessibility();
 
         // Optional: Universal Input Manager (off by default for safety)
-        this.useUniversalInput = false;
+    this.useUniversalInput = false;
         if (window.UniversalInputManager) {
             this.inputBridge = new window.UniversalInputManager();
             if (this.useUniversalInput) {
@@ -2261,6 +2261,25 @@ class DirectionalSkillsGame {
         this.settings.reducedMotion = document.getElementById('reduced-motion').checked;
         this.settings.audioEnabled = document.getElementById('audio-enabled').checked;
         this.settings.resizeHandling = document.getElementById('resize-handling').value;
+
+        // Assistive input settings
+        const universalEnabledEl = document.getElementById('universal-input-enabled');
+        const assistiveMethodEl = document.getElementById('assistive-input-method');
+        if (universalEnabledEl) {
+            this.useUniversalInput = universalEnabledEl.checked;
+            if (this.inputBridge) {
+                if (this.useUniversalInput) {
+                    this.enableUniversalInputBridge();
+                } else {
+                    // Soft disable by switching to keyboard method and clearing queue
+                    this.inputBridge.switchInputMethod('keyboard');
+                    this.inputBridge.clearEvents();
+                }
+            }
+        }
+        if (assistiveMethodEl && this.inputBridge) {
+            this.inputBridge.switchInputMethod(assistiveMethodEl.value);
+        }
         
         // Apply settings
         this.applySettings();
@@ -2297,6 +2316,14 @@ class DirectionalSkillsGame {
         // Recreate audio context if needed
         if (this.settings.audioEnabled && !this.audioContext) {
             this.setupAudio();
+        }
+
+        // Sync Assistive Input form values if present
+        const universalEnabledEl = document.getElementById('universal-input-enabled');
+        const assistiveMethodEl = document.getElementById('assistive-input-method');
+        if (universalEnabledEl) universalEnabledEl.checked = !!this.useUniversalInput;
+        if (assistiveMethodEl && this.inputBridge) {
+            assistiveMethodEl.value = this.inputBridge.activeMethod || 'keyboard';
         }
     }
 

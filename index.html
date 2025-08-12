@@ -152,6 +152,22 @@
                             <option value="pause">Pause game during resize</option>
                         </select>
                     </fieldset>
+
+                    <fieldset>
+                        <legend>Assistive Input (beta)</legend>
+                        <label>
+                            <input type="checkbox" id="universal-input-enabled"> 
+                            Enable Universal Input Manager
+                        </label>
+                        <label for="assistive-input-method">Active Assistive Method:</label>
+                        <select id="assistive-input-method">
+                            <option value="keyboard">Keyboard</option>
+                            <option value="switch">Switch (F1 advance/select)</option>
+                            <option value="eyeGaze">Eye-Gaze (placeholder)</option>
+                            <option value="touch">Touch</option>
+                        </select>
+                        <small class="field-help">Use F1/F2 to test switch scanning; overlay will appear when enabled.</small>
+                    </fieldset>
                 </form>
             </div>
             <div class="modal-footer">
