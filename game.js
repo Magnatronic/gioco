@@ -518,23 +518,7 @@ class DirectionalSkillsGame {
         oscillator.stop(this.audioContext.currentTime + duration);
     }
     
-    // Replay Code Generation System
-    generateReplayCode() {
-        const colors = ['RED', 'BLUE', 'GREEN', 'GOLD', 'PINK', 'CYAN', 'LIME', 'NAVY'];
-        const shapes = ['CIRCLE', 'SQUARE', 'STAR', 'HEART', 'ARROW', 'PLUS', 'CROSS', 'WAVE'];
-        const numbers = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        const shape = shapes[Math.floor(Math.random() * shapes.length)];
-        
-        // Generate 4-character random suffix
-        let suffix = '';
-        for (let i = 0; i < 4; i++) {
-            suffix += numbers[Math.floor(Math.random() * numbers.length)];
-        }
-        
-        return `${color}-${shape}-${suffix}`;
-    }
+    // (Deprecated) Legacy generateReplayCode removed – use generateReplayCodeFromConfig instead.
     
     hashCodeToSeed(code) {
         // Convert replay code to a numeric seed for deterministic generation
