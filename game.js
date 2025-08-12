@@ -2455,8 +2455,10 @@ class DirectionalSkillsGame {
         const color = colors[Math.floor(Math.random() * colors.length)];
         const shape = shapes[Math.floor(Math.random() * shapes.length)];
         
-        // Use the configString directly as the suffix to avoid base-36 conversion issues
-        return `${color}-${shape}-${configString}`;
+        // Return just the configString for shorter codes
+        // Keep color-shape generation for backward compatibility logging
+        console.log('🎨 Generated visual elements:', `${color}-${shape}`, 'but using numbers-only format');
+        return configString;
     }
 
     // Encoding helper methods
@@ -2484,16 +2486,25 @@ class DirectionalSkillsGame {
 
     decodeReplayCode(replayCode) {
         // Extract the configuration from a replay code
-        const parts = replayCode.split('-');
-        if (parts.length !== 3) {
-            console.warn('Invalid replay code format:', replayCode);
-            return null;
+        // Support both old format (COLOR-SHAPE-NUMBERS) and new format (NUMBERS only)
+        let configString;
+        
+        if (replayCode.includes('-')) {
+            // Old format: COLOR-SHAPE-NUMBERS
+            const parts = replayCode.split('-');
+            if (parts.length !== 3) {
+                console.warn('Invalid replay code format:', replayCode);
+                return null;
+            }
+            configString = parts[2];
+            console.log('🔄 Using legacy format code:', replayCode);
+        } else {
+            // New format: NUMBERS only
+            configString = replayCode;
+            console.log('🔢 Using numbers-only format code:', replayCode);
         }
         
         try {
-            // Decode the configuration part - now it's directly the numeric string
-            const configString = parts[2];
-            
             // Validate that the configString is exactly 14 digits
             if (!/^\d{14}$/.test(configString)) {
                 console.warn('Invalid configuration string format:', configString);
