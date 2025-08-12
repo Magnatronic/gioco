@@ -54,8 +54,8 @@ This therapeutic game helps students with physical and learning difficulties dev
 
 ### Mouse Controls (Session Mode)
 - **Click-to-Move**: Click anywhere to move your character to that position
-- **Switch Control**: Compatible with single and dual switch inputs
-- **Eye-Gaze**: Dwell time activation with visual feedback
+- **Switch Control**: Compatible with single and dual switch inputs (F1/F2 test keys; scanning overlay included)
+- **Eye-Gaze**: Experimental placeholder with dwell-time concept (no hardware integration yet)
 - **Ctrl + H**: Context-sensitive help
 - **H**: Show help information
 - **M**: Mute/unmute sounds

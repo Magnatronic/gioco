@@ -97,6 +97,15 @@ class DirectionalSkillsGame {
         this.loadSettings();
         this.setupEventListeners();
         this.setupAccessibility();
+
+        // Optional: Universal Input Manager (off by default for safety)
+        this.useUniversalInput = false;
+        if (window.UniversalInputManager) {
+            this.inputBridge = new window.UniversalInputManager();
+            if (this.useUniversalInput) {
+                this.enableUniversalInputBridge();
+            }
+        }
         
         // Initialize session but don't start
         this.initializeNewSession();
@@ -115,6 +124,49 @@ class DirectionalSkillsGame {
         // Make testing available globally for easy debugging
         window.testReplaySystem = () => this.testReplayCodeAccuracy();
         this._log('🧪 To test replay code accuracy, run: testReplaySystem()');
+    }
+
+    enableUniversalInputBridge() {
+        if (!this.inputBridge) return;
+        // Feed events into existing input handlers
+        this.inputBridge.on('movement', (evt) => {
+            const dir = evt.data.direction;
+            if (!dir) return;
+            // Start timed session on first input
+            if (this.gameState === 'ready') this.beginTimedSession();
+            if (dir === 'stop') {
+                // No-op; discrete movement relies on key state
+                return;
+            }
+            if (this.sessionConfig.inputMethod === 'continuous') {
+                this.setContinuousDirection(dir);
+            } else if (this.sessionConfig.inputMethod === 'discrete') {
+                // Directly move a small step to emulate key repeat when buffer enabled
+                this.movePlayer(dir);
+            }
+        });
+        this.inputBridge.on('action', (evt) => {
+            const action = evt.data.action;
+            if (action === 'pause') this.togglePlayPause();
+            if (action === 'confirm') this.startSession();
+            if (action === 'tap' && this.sessionConfig.inputMethod === 'mouse') {
+                // Map tap to click-to-move center point when possible
+                const coords = evt.data.coordinates;
+                if (coords) {
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.player.targetX = coords.x - rect.left;
+                    this.player.targetY = coords.y - rect.top;
+                    if (this.gameState === 'ready') this.beginTimedSession();
+                }
+            }
+        });
+        this.inputBridge.on('interface', (evt) => {
+            const cmd = evt.data.command;
+            if (cmd === 'menu') this.returnToMainMenu();
+            if (cmd === 'help') this.openHelp();
+            if (cmd === 'mute') this.toggleSound();
+        });
+        this._log('Universal Input Bridge enabled');
     }
 
     // Guarded logger

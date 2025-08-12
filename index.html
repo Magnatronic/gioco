@@ -523,33 +523,51 @@
     <script src="core/game-scene.js"></script>
     <script src="mini-games/registry.js"></script>
     <script src="mini-games/directional-practice.js"></script>
+    <script src="input-manager.js"></script>
+
+    <!-- Switch scanning overlay (shown when Switch input is enabled) -->
+    <div id="switch-overlay" role="region" aria-label="Switch scanning overlay" style="display:none"></div>
 
     <!-- Game Script -->
-        <script src="game.js"></script>
-        <script>
-            // Bootstrap the SceneManager + Engine and mount the main game scene once DOM is ready
-            window.addEventListener('DOMContentLoaded', function () {
-                if (!window.SceneManager || !window.Engine || !window.GameScene) return;
-                try {
-                    var canvas = document.getElementById('game-canvas');
-                    var ctx = canvas ? canvas.getContext('2d') : null;
-                    if (!ctx) return;
-                    window.sceneManager = window.sceneManager || new window.SceneManager();
-                    window.engine = window.engine || new window.Engine(ctx);
-                    // Register and switch to main scene wrapping existing game instance
-                    if (!window._mainSceneRegistered) {
-                        window.sceneManager.register('main', new window.GameScene());
-                        window._mainSceneRegistered = true;
+            <script src="game.js"></script>
+            <script>
+                // Bootstrap the SceneManager + Engine and mount the main game scene once DOM is ready
+                window.addEventListener('DOMContentLoaded', function () {
+                    if (!window.SceneManager || !window.Engine || !window.GameScene) return;
+                    try {
+                        // Optional kill-switch: add ?engine=off to the URL to skip external engine
+                        var params = new URLSearchParams(window.location.search);
+                        if (params.get('engine') === 'off') {
+                            console.warn('External engine disabled via URL param ?engine=off');
+                            return;
+                        }
+
+                        var canvas = document.getElementById('game-canvas');
+                        var ctx = canvas ? canvas.getContext('2d') : null;
+                        if (!ctx) return;
+                        window.sceneManager = window.sceneManager || new window.SceneManager();
+                        window.engine = window.engine || new window.Engine(ctx);
+                        // Register and switch to main scene wrapping existing game instance
+                        if (!window._mainSceneRegistered) {
+                            window.sceneManager.register('main', new window.GameScene());
+                            window._mainSceneRegistered = true;
+                        }
+                        window.sceneManager.switch('main');
+                        if (!window.engine.running) {
+                            window.engine.start(window.sceneManager);
+                        }
+
+                        // Lightweight input delegation (non-breaking): forward key events to the active scene if supported
+                        function forwardInput(evt) {
+                            try { if (window.sceneManager && typeof window.sceneManager.handleInput === 'function') { window.sceneManager.handleInput(evt); } } catch (e) {}
+                        }
+                        window.addEventListener('keydown', forwardInput, { capture: true });
+                        window.addEventListener('keyup', forwardInput, { capture: true });
+                    } catch (e) {
+                        console.warn('Engine bootstrap failed:', e);
                     }
-                    window.sceneManager.switch('main');
-                    if (!window.engine.running) {
-                        window.engine.start(window.sceneManager);
-                    }
-                } catch (e) {
-                    console.warn('Engine bootstrap failed:', e);
-                }
-            });
-        </script>
+                });
+            </script>
 </body>
 </html>< ! - -   T r i g g e r   P a g e s   d e p l o y m e n t   - - > 
  
