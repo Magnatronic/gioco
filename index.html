@@ -537,6 +537,8 @@
     <script src="core/engine.js"></script>
     <script src="core/replay-code.js"></script>
     <script src="core/game-scene.js"></script>
+    <script src="core/menu-scene.js"></script>
+    <script src="core/results-scene.js"></script>
     <script src="mini-games/registry.js"></script>
     <script src="mini-games/directional-practice.js"></script>
     <script src="input-manager.js"></script>
@@ -563,12 +565,22 @@
                         if (!ctx) return;
                         window.sceneManager = window.sceneManager || new window.SceneManager();
                         window.engine = window.engine || new window.Engine(ctx);
-                        // Register and switch to main scene wrapping existing game instance
+                                    // Register scenes and switch to main scene wrapping existing game instance
                         if (!window._mainSceneRegistered) {
                             window.sceneManager.register('main', new window.GameScene());
+                                        window.sceneManager.register('menu', new window.MenuScene());
+                                        window.sceneManager.register('results', new window.ResultsScene());
                             window._mainSceneRegistered = true;
                         }
-                        window.sceneManager.switch('main');
+                                    // Default to menu, then switch to main when a session starts
+                                    window.sceneManager.switch('menu');
+                                    // Non-breaking: keep DOM buttons working; when a session starts, switch to main
+                                    const startSessionBtn = document.getElementById('start-session');
+                                    if (startSessionBtn) {
+                                        startSessionBtn.addEventListener('click', function () {
+                                            setTimeout(function () { window.sceneManager.switch('main'); }, 0);
+                                        });
+                                    }
                         if (!window.engine.running) {
                             window.engine.start(window.sceneManager);
                         }

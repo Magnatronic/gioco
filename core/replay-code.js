@@ -11,6 +11,13 @@
   function decodeInputMethod(n) { const m = { 0: 'discrete', 1: 'continuous', 2: 'mouse' }; return m[n] || 'discrete'; }
   function decodeBoundaries(n) { const m = { 0: 'none', 1: 'visual', 2: 'hard' }; return m[n] || 'none'; }
 
+  function checksum14(s) {
+    // Simple mod-10 checksum (Luhn-like variant without doubling) for 14-digit base
+    let sum = 0;
+    for (let i = 0; i < s.length; i++) sum = (sum + (s.charCodeAt(i) - 48)) % 10;
+    return String(sum);
+  }
+
   function generateFromConfig(config) {
     const d = {
       st: Math.min(config.targetCounts.stationary, 9),
@@ -28,7 +35,10 @@
       fv: config.feedback.visual ? 1 : 0,
       fh: config.feedback.haptic ? 1 : 0
     };
-    return `${d.st}${d.mv}${d.fl}${d.bn}${d.hz}${d.sz}${d.sp}${d.tr}${d.im}${d.ib}${d.bd}${d.fa}${d.fv}${d.fh}`;
+    const payload = `${d.st}${d.mv}${d.fl}${d.bn}${d.hz}${d.sz}${d.sp}${d.tr}${d.im}${d.ib}${d.bd}${d.fa}${d.fv}${d.fh}`; // 14 digits
+    const ver = '1'; // version nibble
+    const chk = checksum14(payload);
+    return `${payload}${ver}${chk}`; // 16 digits total
   }
 
   function decode(code) {
@@ -37,28 +47,44 @@
       const parts = s.split('-');
       if (parts.length === 3) s = parts[2]; else return null;
     }
-    if (!/^\d{14}$/.test(s)) return null;
+    // Backward compatibility: accept 14-digit codes (no version/checksum)
+    let payload = null;
+    if (/^\d{16}$/.test(s)) {
+      const body = s.slice(0, 14);
+      const ver = s[14];
+      const chk = s[15];
+      // Validate checksum only for known version '1'
+      if (ver === '1') {
+        const ok = checksum14(body) === chk;
+        if (!ok) return null;
+      }
+      payload = body;
+    } else if (/^\d{14}$/.test(s)) {
+      payload = s; // legacy
+    } else {
+      return null;
+    }
     return {
       targetCounts: {
-        stationary: parseInt(s[0]) || 0,
-        moving: parseInt(s[1]) || 0,
-        flee: parseInt(s[2]) || 0,
-        bonus: parseInt(s[3]) || 0,
-        hazard: parseInt(s[4]) || 0
+        stationary: parseInt(payload[0]) || 0,
+        moving: parseInt(payload[1]) || 0,
+        flee: parseInt(payload[2]) || 0,
+        bonus: parseInt(payload[3]) || 0,
+        hazard: parseInt(payload[4]) || 0
       },
-      targetSize: decodeSize(parseInt(s[5])),
-      playerSpeed: parseInt(s[6]) || 3,
-      playerTrail: decodeTrail(parseInt(s[7])),
-      inputMethod: decodeInputMethod(parseInt(s[8])),
-      inputBuffer: (parseInt(s[9]) || 0) * 50,
-      boundaries: decodeBoundaries(parseInt(s[10])),
-      feedback: { audio: s[11] === '1', visual: s[12] === '1', haptic: s[13] === '1' }
+      targetSize: decodeSize(parseInt(payload[5])),
+      playerSpeed: parseInt(payload[6]) || 3,
+      playerTrail: decodeTrail(parseInt(payload[7])),
+      inputMethod: decodeInputMethod(parseInt(payload[8])),
+      inputBuffer: (parseInt(payload[9]) || 0) * 50,
+      boundaries: decodeBoundaries(parseInt(payload[10])),
+      feedback: { audio: payload[11] === '1', visual: payload[12] === '1', haptic: payload[13] === '1' }
     };
   }
 
   window.ReplayCode = {
     encodeSize, encodeTrail, encodeInputMethod, encodeBoundaries,
     decodeSize, decodeTrail, decodeInputMethod, decodeBoundaries,
-    generateFromConfig, decode
+  generateFromConfig, decode
   };
 })();
