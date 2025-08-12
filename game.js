@@ -200,7 +200,12 @@ class DirectionalSkillsGame {
             pausedTime: 0,
             pauseStartTime: null,
             targetsCollected: 0,
-            totalTargets: this.sessionConfig.targetCount,
+            // Track only core targets for progress (stationary + moving + flee)
+            totalTargets: (
+                (this.sessionConfig.targetCounts?.stationary || 0) +
+                (this.sessionConfig.targetCounts?.moving || 0) +
+                (this.sessionConfig.targetCounts?.flee || 0)
+            ),
             coreTargetsCollected: 0, // Track core targets separately
             bonusTargetsCollected: 0, // Track bonus targets
             hazardTargetsHit: 0, // Track hazard targets hit
@@ -2052,11 +2057,21 @@ class DirectionalSkillsGame {
         
         try {
             document.execCommand('copy');
-            this.announceToScreenReader(`Replay code ${text} copied to clipboard`);
-            this.showToast(`Replay code copied: ${text}`);
+            // Unified confirmation across contexts (results button + screen reader + toast)
+            if (typeof this.showCopyConfirmation === 'function') {
+                this.showCopyConfirmation();
+            }
+            if (typeof this.announceToScreenReader === 'function') {
+                this.announceToScreenReader(`Replay code ${text} copied to clipboard`);
+            }
+            if (typeof this.showToast === 'function') {
+                this.showToast(`Replay code copied: ${text}`);
+            }
         } catch (err) {
             console.warn('Fallback copy failed:', err);
-            this.announceToScreenReader('Failed to copy replay code');
+            if (typeof this.announceToScreenReader === 'function') {
+                this.announceToScreenReader('Failed to copy replay code');
+            }
         }
         
         document.body.removeChild(textArea);
@@ -2558,7 +2573,8 @@ class DirectionalSkillsGame {
 
     decodeBoundaries(num) {
         const boundariesMap = { 0: 'none', 1: 'visual', 2: 'hard' };
-        return boundariesMap[num] || 'visual';
+        // Default to 'none' to align with encode defaults
+        return boundariesMap[num] || 'none';
     }
 
     // Testing method to verify code accuracy
@@ -2809,7 +2825,9 @@ class DirectionalSkillsGame {
         // Try to use the modern clipboard API
         if (navigator.clipboard && window.isSecureContext) {
             navigator.clipboard.writeText(replayCode).then(() => {
-                this.showCopyConfirmation();
+                if (typeof this.showCopyConfirmation === 'function') this.showCopyConfirmation();
+                if (typeof this.announceToScreenReader === 'function') this.announceToScreenReader(`Replay code ${replayCode} copied to clipboard`);
+                if (typeof this.showToast === 'function') this.showToast(`Replay code copied: ${replayCode}`);
             }).catch(() => {
                 this.fallbackCopyToClipboard(replayCode);
             });
