@@ -379,6 +379,17 @@ class KeyboardInput extends BaseInput {
         if (!this.enabled) return;
         
         const keyCode = event.code;
+        // Emergency accessibility shortcuts
+        if (event.altKey && (keyCode === 'KeyM' || event.key === 'm' || event.key === 'M')) {
+            event.preventDefault();
+            this.emit('input', { type: 'interface', command: 'menu' });
+            return;
+        }
+        if (event.ctrlKey && (keyCode === 'KeyH' || event.key === 'h' || event.key === 'H')) {
+            event.preventDefault();
+            this.emit('input', { type: 'interface', command: 'help' });
+            return;
+        }
         const mapping = this.keyMappings[keyCode];
         
         if (mapping) {

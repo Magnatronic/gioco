@@ -1,41 +1,34 @@
-# Gioco - Directional Skills Therapeutic Game
+# Gioco – Directional Skills Practice Game
 
-An accessible educational web game designed specifically for therapists and students with physical and learning difficulties. The game provides customizable therapeutic sessions to develop directional navigation skills using multiple input methods.
+Gioco is a lightweight, browser‑based game for practicing directional control skills. Sessions are fully configurable and reproducible via replay codes, making it easy to compare performance over time or share identical challenges with others.
 
-## 🎯 Purpose
+Focus: timed target collection + consistent repetition + clear feedback.
 
-This therapeutic game helps students with physical and learning difficulties develop confidence and proficiency with directional controls through customizable, reproducible sessions. Perfect for:
-
-- Therapeutic environments and occupational therapy
-- Students with diverse learning and motor needs
-- Developing hand-eye coordination and spatial awareness  
-- Building digital navigation confidence with adaptive controls
-- Creating reproducible practice sessions for consistent assessment
+Run it locally or host as static files (e.g. GitHub Pages) – no servers, builds, or accounts.
 
 ## ✨ Key Features
 
-### Accessibility First
-- **WCAG 2.1 AA compliant** design
-- **Multiple input methods**: Keyboard, mouse, touch
-- **Screen reader compatible** with comprehensive ARIA support
-- **High contrast mode** with customizable themes
-- **Reduced motion options** for better accessibility
-- **Keyboard-only navigation** throughout the interface
+### Accessibility & Inclusiveness
+- ARIA live regions for status + alerts
+- Keyboard-first design (skip link, logical focus order)
+- Multiple input styles: discrete, continuous, mouse click‑to‑move
+- Optional universal input bridge (experimental) for abstracted methods (keyboard / switch / eye‑gaze / touch)
+- High contrast & reduced motion toggles (attribute hooks present; styling can be extended)
 
-### Educational Design
-- **Therapeutic sessions** with fully customizable difficulty and target types
-- **Reproducible challenges** using Replay Codes for consistent assessment
-- **Multiple target types**: Static, moving, fleeing, and bonus targets
-- **Adaptive feedback** with visual and audio cues
-- **Progress tracking** to monitor improvement over time
-- **Session-based approach** for structured therapeutic interventions
+### Core Gameplay / Learning Hooks
+- Reproducible sessions via deterministic Replay Codes (seeded target layout + player start)
+- Multiple target types: static, moving, fleeing, bonus, hazard
+- Time adjustments (bonus reduction / hazard penalty) tracked separately for transparency
+- Configurable counts, sizes, movement mode, speed, boundaries & feedback
+- Live timer + progress + session history (stores recent runs locally)
+- Consistent layout regeneration enables fair comparisons between attempts
 
-### Technology
-- **No installation required** - runs in any modern web browser
-- **Works offline** once loaded
-- **Responsive design** for desktop, tablet, and mobile
-- **Local storage only** - no data collection or external dependencies
-- **Cross-platform** support
+### Technical Characteristics
+- Pure HTML / CSS / Vanilla JS (no build toolchain)
+- Modular architecture (announcer, targets, timing, input, collision, UI, resize)
+- Deterministic pseudo‑random seeding (LCG) derived from text replay codes
+- Runs entirely client‑side; localStorage used for settings & recent sessions only
+- Basic browser caching (no service worker) – assets remain available after first load while cached
 
 ## 🎮 How to Play
 
@@ -47,26 +40,26 @@ This therapeutic game helps students with physical and learning difficulties dev
 - **Tab**: Navigate interface elements
 
 ### Game Sessions
-- **Customizable Sessions**: Configure target count, size, movement, and input methods
-- **Replay Codes**: Use memorable codes to repeat identical sessions for assessment
-- **Therapeutic Presets**: Pre-configured sessions for common therapeutic goals
-- **Real-time Progress**: Live timer and progress tracking during sessions
+- Configure target counts (static / moving / flee / bonus / hazard)
+- Select target size, movement style, speed, input method
+- Generate or paste a Replay Code to reproduce a session
+- Timer starts on first movement input (encourages deliberate readiness)
+- View results + history after completion (time, targets collected, replay code)
 
-### Mouse Controls (Session Mode)
-- **Click-to-Move**: Click anywhere to move your character to that position
-- **Switch Control**: Compatible with single and dual switch inputs
-- **Eye-Gaze**: Dwell time activation with visual feedback
-- **Ctrl + H**: Context-sensitive help
-- **H**: Show help information
-- **M**: Mute/unmute sounds
+### Additional Inputs / Shortcuts
+- Mouse: click target location in mouse mode
+- (Experimental) Universal Input Bridge: `?input=keyboard|switch|eyeGaze|touch`
+- Ctrl + H: Context help
+- M: Toggle sound
+- ESC: Pause / safe state
 
 
-### Gameplay
-1. **Setup**: Configure session parameters (targets, size, movement, input methods)
-2. **Objective**: Move your character to collect all colored targets in the session
-3. **Assessment**: Use Replay Codes to repeat identical sessions for progress tracking
-4. **Learning**: Build confidence through adaptive, customizable challenges
-5. **Progress**: Review session history and completion times
+### Gameplay Loop
+1. Configure session (or accept defaults)
+2. (Optional) Enter a known Replay Code to reproduce a prior layout
+3. Start – timer begins on first movement
+4. Collect all core targets (bonus/hazard adjust time but do not count toward completion)
+5. Review results & copy code for repetition
 
 ## 🛠 Technical Setup
 
@@ -75,12 +68,10 @@ This therapeutic game helps students with physical and learning difficulties dev
 2. **Open `index.html`** in a web browser
 3. **Start playing** - no additional setup required!
 
-### For Therapists and Educators
-1. **Host on GitHub Pages** for easy student access
-2. **Create Replay Codes** for consistent therapeutic sessions
-3. **Monitor progress** through session history and timing data
-4. **Customize sessions** for individual student needs and goals
-5. **Share challenges** with colleagues using Replay Codes
+### Hosting / Sharing
+1. Host the repository on GitHub Pages (or any static host)
+2. Share a Replay Code + your chosen configuration notes
+3. Others paste the code to run the identical session
 
 ### Browser Requirements
 - **Modern web browser** (Chrome 90+, Firefox 88+, Safari 14+, Edge 90+)
@@ -88,159 +79,104 @@ This therapeutic game helps students with physical and learning difficulties dev
 - **HTML5 Canvas support**
 - **Web Audio API** for sound effects (optional)
 
-## 📊 Progress Tracking
+## 📊 Tracking & Privacy
+Automatically captured locally:
+- Completion time (raw + adjustments)
+- Targets collected vs. total
+- Replay Code (seed)
+- Recent configuration snapshot
 
-The game includes comprehensive progress tracking designed for therapeutic environments:
+NOT captured / transmitted:
+- Personal data, identifiers, analytics
 
-### Automatically Tracked
-- Session duration and completion times
-- Target collection patterns and efficiency
-- Input method preferences and effectiveness
-- Session configuration choices and adaptations
-- Recent session history with Replay Codes
-
-### Therapeutic Insights
-- Skill development progression over time
-- Response to different difficulty configurations
-- Engagement patterns and session completion rates
-- Preferred input methods and accessibility settings
-- Areas for focused intervention
-
-### Privacy Protection
-- **No personal information** collected
-- **Local storage only** - data never leaves the device
-- **GDPR compliant** with clear consent options
-- **Data retention limits** - old data automatically cleaned
+Data Scope: last 10 sessions (older entries dropped). Clear storage by using browser site data clearing.
 
 ## 🔧 Customization
 
-### Session Configuration
-- **Target Settings**: Individual counts for each type (static, moving, fleeing, bonus), size (small to extra-large)
-- **Player Controls**: Movement speed, trail visibility, input buffer timing
-- **Input Methods**: Keyboard, mouse click, switch control, eye-gaze compatibility
-- **Environment**: Boundary options, visual/audio feedback, haptic support
-- **Replay Codes**: Memorable text codes for session reproducibility
+### Session Configuration Options
+- Target counts by type
+- Target size (small → extra‑large)
+- Player speed & input mode (discrete, continuous, mouse)
+- Boundaries (none / visual / hard)
+- Feedback: audio / visual toggles
+- Replay Code (auto generated or user supplied)
 
-### Accessibility Options
-- **Input method selection**: Keyboard, switch, eye-gaze, touch
-- **Visual customization**: High contrast, reduced motion, text size
-- **Audio preferences**: Volume control, sound on/off, spatial audio
-- **Timing adjustments**: Movement speed, input sensitivity, scan timing
+### Accessibility / UX Options
+- Reduced motion
+- High contrast
+- Input buffering interval
+- Alternative input selection via query parameter
 
-### Therapeutic Adaptations
-- **Target size and movement** adaptable for various motor skill levels
-- **Movement speed control** for processing time and reaction needs
-- **Input buffering and sensitivity** to prevent missed commands
-- **Visual simplification options** to reduce cognitive load
-- **Multi-modal feedback** supporting diverse sensory preferences
+## 🔍 Replay Codes Explained
+Replay Codes are human‑readable text seeds (e.g. `bright-circle`).
 
-## � For Therapists and Educators
+How they work:
+1. Text → numeric seed via hash
+2. Deterministic RNG (LCG) drives player spawn + target placement
+3. Same code + same configuration → identical layout
 
-### Therapeutic Integration
-- **No technical expertise required** for session configuration
-- **Compatible with existing assistive technology** setups
-- **Reproducible sessions** using Replay Codes for consistent assessment
-- **Customizable parameters** for diverse therapeutic goals and abilities
-
-### Therapeutic Objectives Supported
-- **Digital navigation skills** - directional control proficiency and confidence
-- **Motor skill development** - fine motor control and hand-eye coordination
-- **Cognitive skills** - spatial awareness, planning, and goal-directed behavior
-- **Independence building** - self-paced learning and adaptive technology use
-
-### Assessment and Documentation
-- **Session reproducibility** for standardized assessment using Replay Codes
-- **Progress tracking** through completion times and session history
-- **Adaptation documentation** via session configuration records
-- **Skill transfer evaluation** to other digital environments
+Use cases:
+- Timing improvement comparisons
+- Sharing identical challenges
+- Regression testing after code changes
 
 ## 🧪 Testing and Quality Assurance
 
-### Accessibility Testing
-- **Screen reader compatibility** verified with NVDA and JAWS
-- **Keyboard navigation** tested throughout all interfaces
-- **Switch control simulation** available for testing
-- **Color contrast validation** exceeds WCAG standards
-- **Performance optimization** for older hardware
+### Accessibility / QA
+- Screen reader live regions (status + alerts)
+- Keyboard traversal verified for menus & modals
+- Attribute flags for high contrast / reduced motion (CSS theming minimal by default)
 
-### Browser Compatibility
-- **Primary support**: Chrome, Firefox, Edge, Safari (latest versions)
-- **Secondary support**: Recent versions of the same browsers
-- **Mobile compatibility**: iOS Safari, Chrome Mobile, Samsung Internet
-- **Graceful degradation** for unsupported features
-
-### Therapeutic Validation
-- **Developed with occupational therapy specialist** input
-- **Designed for real therapeutic needs** and constraints
-- **Tested for engagement** and therapeutic effectiveness
-- **Iteratively improved** based on therapist and student feedback
+### Compatibility
+- Modern evergreen browsers (Chrome / Edge / Firefox / Safari)
+- Works on typical college / lab hardware (no WebGL dependency)
 
 ## 📂 Project Structure
 
 ```
-directional-skills-game/
-├── index.html              # Main game interface with session setup
-├── styles.css              # Comprehensive styling with accessibility
-├── game.js                 # Core session-based game logic
-├── README.md               # Project documentation
-├── .github/                # GitHub configuration
-└── copilot-instructions/   # Development guidelines
-    └── *.md               # Detailed accessibility and design requirements
+gioco/
+├── index.html                # Entry point / script ordering (modules then game.js)
+├── styles.css                # Styling + high contrast / motion preferences
+├── game.js                   # Orchestrator (delegates to modules)
+├── core/
+│   └── modules/              # Extracted functional modules
+│       ├── target-generation.js
+│       ├── session-timing.js
+│       ├── input-handling.js
+│       ├── collision-effects.js
+│       ├── ui-session.js
+│       └── resize-handling.js
+├── a11y/
+│   └── announcer.js          # Screen reader announcements
+├── scenes/                   # Scene classes (menu, session, results, etc.)
+├── README.md
+└── copilot-instructions/     # Development guidelines & accessibility requirements
 ```
 
 ## 🤝 Contributing
 
-This project welcomes contributions, especially from:
-- **Occupational therapists** - therapeutic approach improvements
-- **Assistive technology specialists** - accessibility enhancements
-- **Special education professionals** - educational feature development
-- **Students with disabilities** - user experience feedback
-- **Web developers** - technical improvements and bug fixes
-
-### Development Guidelines
-- **Accessibility first** - every feature must be accessible
-- **Therapeutic value** - changes should support therapeutic objectives
-- **Reproducibility** - maintain session consistency via Replay Codes
-- **Performance conscious** - maintain compatibility with assistive technology
-- **Documentation complete** - all changes require clear documentation
+Contributions welcome (accessibility refinements, performance tweaks, new target behaviors, improved input abstractions). Please keep:
+- Accessibility intact (no regressions in keyboard / SR support)
+- Deterministic generation stable (avoid changing seeding logic without version notes)
+- Replay Code format backward compatible where possible
+- Minimal footprint (avoid adding heavy dependencies)
 
 ## 📜 License
 
-This therapeutic game is released under the MIT License, encouraging:
-- **Free use** in therapeutic and educational settings
-- **Modification** for specific patient and student needs
-- **Distribution** to support accessibility in healthcare and education
-- **Commercial adaptation** with attribution
+Released under MIT – free to use, modify, and share.
 
 ## 🆘 Support
 
-### For Technical Issues
-- Check browser console for error messages
-- Verify JavaScript is enabled
-- Try refreshing the page or clearing browser cache
-- Test with a different browser
-
-### For Therapeutic Questions
-- Review session configuration options for therapeutic goals
-- Experiment with Replay Codes for consistent assessment
-- Check the session history features for progress insights
-- Consider the game as part of a broader therapeutic intervention plan
-
-### For Accessibility Concerns
-- Test with your specific assistive technology setup
-- Report any barriers encountered during gameplay
-- Suggest improvements for your particular needs
-- Share feedback on what works well
+### Technical Help
+1. Open dev tools console for errors
+2. Confirm scripts load order (modules before game.js)
+3. Test with `?debug=1` to enable internal logging
+4. Clear localStorage (key: `giocoSessionHistory`) if corrupted
 
 ## 🌟 Acknowledgments
 
-This project was developed with the understanding that accessible design benefits everyone, particularly in therapeutic contexts. Special thanks to:
-- **Students with disabilities** who provided invaluable feedback
-- **Occupational therapists** who guided the therapeutic approach
-- **Assistive technology specialists** who ensured inclusive implementation
-- **Special education professionals** who shaped the educational framework
-- **The broader disability community** for advocating for digital inclusion
+Special thanks to early users who stress‑tested replay determinism and interaction flows.
 
 ---
 
-**Made with accessibility, therapeutic value, and inclusion at the heart of every design decision.**
+Made with a focus on clarity, reproducibility, and inclusive interaction.

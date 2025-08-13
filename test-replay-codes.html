@@ -57,6 +57,8 @@
     </style>
 </head>
 <body>
+    <!-- Hidden canvas to satisfy game.js constructor during tests -->
+    <canvas id="game-canvas" width="1" height="1" style="position:absolute; left:-9999px; width:1px; height:1px; opacity:0;" aria-hidden="true"></canvas>
     <h1>🧪 Replay Code Test Suite</h1>
     <p>Testing the new numbers-only replay code format with backward compatibility.</p>
 
@@ -77,10 +79,10 @@
 
     <div class="test-section">
         <h2>📝 Example Codes</h2>
-        <h3>New Format (Numbers Only):</h3>
-        <div class="code-example">10000130060110</div>
-        <div class="code-example">54321243211100</div>
-        <div class="code-example">99999999999999</div>
+    <h3>New Format (v1 + checksum, 16 digits):</h3>
+    <div class="code-example">1000013006011013</div>
+    <div class="code-example">5432124321110019</div>
+    <div class="code-example">9999999999999916</div>
         
         <h3>Legacy Format (COLOR-SHAPE-NUMBERS):</h3>
         <div class="code-example">RED-ARROW-10000130060110</div>
@@ -88,33 +90,43 @@
         <div class="code-example">GREEN-STAR-99999999999999</div>
     </div>
 
+    <script src="core/replay-code.js"></script>
     <script src="game.js"></script>
     <script>
         // Initialize game instance for testing
         const testGame = new DirectionalSkillsGame();
+        // Simple checksum helper (must mirror core/replay-code.js)
+        function checksum14(s) {
+            let sum = 0;
+            for (let i = 0; i < s.length; i++) sum = (sum + (s.charCodeAt(i) - 48)) % 10;
+            return String(sum);
+        }
+        function v1FromPayload(payload14) {
+            return payload14 + '1' + checksum14(payload14);
+        }
         
         // Test cases
-        const testCases = [
+    const testCases = [
             {
-                name: "New Format - Basic Configuration",
-                code: "10000130060110",
+                name: "New Format v1 - Basic Configuration",
+        code: v1FromPayload("10000130060110"),
                 expectedValid: true,
                 description: "Numbers-only format with basic config"
             },
             {
-                name: "Legacy Format - Same Configuration",
+                name: "Legacy Format - Same Configuration (14-digit payload)",
                 code: "RED-ARROW-10000130060110",
                 expectedValid: true,
                 description: "Old COLOR-SHAPE-NUMBERS format"
             },
             {
-                name: "New Format - Complex Configuration",
-                code: "54321243211100",
+                name: "New Format v1 - Complex Configuration",
+        code: v1FromPayload("54321243211100"),
                 expectedValid: true,
                 description: "Numbers-only with complex settings"
             },
             {
-                name: "Legacy Format - Complex Configuration",
+                name: "Legacy Format - Complex Configuration (14-digit payload)",
                 code: "BLUE-CIRCLE-54321243211100",
                 expectedValid: true,
                 description: "Legacy format with complex settings"
@@ -123,7 +135,7 @@
                 name: "Invalid - Wrong Length",
                 code: "123456789",
                 expectedValid: false,
-                description: "Too short (9 digits instead of 14)"
+                description: "Too short"
             },
             {
                 name: "Invalid - Contains Letters",
@@ -138,16 +150,16 @@
                 description: "Missing numeric part in legacy format"
             },
             {
-                name: "Edge Case - All Zeros",
+                name: "Edge Case - All Zeros (legacy 14-digit)",
                 code: "00000000000000",
                 expectedValid: true,
-                description: "Minimum configuration (all zeros)"
+                description: "Minimum configuration (legacy)"
             },
             {
-                name: "Edge Case - All Nines",
+                name: "Edge Case - All Nines (legacy 14-digit)",
                 code: "99999999999999",
                 expectedValid: true,
-                description: "Maximum configuration (all nines)"
+                description: "Maximum configuration (legacy)"
             }
         ];
 
@@ -159,13 +171,24 @@
             let total = testCases.length;
             let results = [];
 
+            const failures = [];
             testCases.forEach((test, index) => {
                 try {
-                    const decoded = testGame.decodeReplayCode(test.code);
+                    const decoded = (window.ReplayCode && typeof window.ReplayCode.decode === 'function')
+                        ? window.ReplayCode.decode(test.code)
+                        : testGame.decodeReplayCode(test.code);
                     const isValid = decoded !== null;
                     const testPassed = isValid === test.expectedValid;
                     
                     if (testPassed) passed++;
+                    else failures.push(test.name);
+                    // Per-test beacon
+                    try {
+                        const img = new Image();
+                        const status = testPassed ? 'PASS' : 'FAIL';
+                        const name = encodeURIComponent(test.name);
+                        img.src = `/__test__/case/${index + 1}/${status}.png?name=${name}`;
+                    } catch (e) { /* noop */ }
                     
                     results.push(`
                         <div class="result ${testPassed ? 'success' : 'error'}">
@@ -191,6 +214,15 @@
                 <h3>Test Summary: ${passed}/${total} passed</h3>
                 ${results.join('')}
             `;
+
+            // Signal results via a dummy image request so the server log shows the pass count
+            try {
+                const img = new Image();
+                const q = failures.length ? `&failures=${encodeURIComponent(failures.join(';'))}` : '';
+                img.src = `/__test_result__/${passed}-of-${total}.png?ts=${Date.now()}${q}`;
+            } catch (e) {
+                // no-op
+            }
         }
 
         function testManualCode() {
@@ -203,7 +235,9 @@
             }
 
             try {
-                const decoded = testGame.decodeReplayCode(code);
+                const decoded = (window.ReplayCode && typeof window.ReplayCode.decode === 'function')
+                    ? window.ReplayCode.decode(code)
+                    : testGame.decodeReplayCode(code);
                 if (decoded) {
                     resultDiv.innerHTML = `
                         <div class="result success">

@@ -79,6 +79,33 @@ html, body {
     margin-bottom: 3rem;
 }
 
+/* Accessible Switch Scanning Overlay */
+#switch-overlay {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    z-index: 1000;
+    pointer-events: none;
+}
+.scan-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 12px;
+    margin: 4px;
+    border-radius: 8px;
+    background: #222;
+    color: #fff;
+    border: 2px solid #555;
+    font-size: 14px;
+}
+.scan-indicator.scanning {
+    border-color: #00e676;
+    box-shadow: 0 0 0 3px rgba(0, 230, 118, 0.25);
+}
+
 .game-title {
     font-size: 2.5rem;
     font-weight: 700;
@@ -303,6 +330,12 @@ html, body {
     font-weight: 700;
     color: var(--primary-color);
     font-size: 1.1rem;
+}
+
+/* Negative time (net time below zero) styling */
+#current-session-time.time-negative {
+    color: var(--success-color);
+    text-shadow: 0 0 4px rgba(39, 174, 96, 0.4);
 }
 
 .metric-separator {

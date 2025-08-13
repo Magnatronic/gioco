@@ -95,6 +95,10 @@
                     <span class="metric-label">Time:</span>
                     <span class="metric-value" id="current-session-time">00:00</span>
                 </div>
+                <div class="metric-item" id="input-method-display">
+                    <span class="metric-label">Input:</span>
+                    <span class="metric-value" id="current-input-method">Keyboard</span>
+                </div>
             </div>
             
             <!-- Progress Bar Overlay -->
@@ -151,6 +155,22 @@
                             <option value="regenerate">Generate new target positions</option>
                             <option value="pause">Pause game during resize</option>
                         </select>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Assistive Input (beta)</legend>
+                        <label>
+                            <input type="checkbox" id="universal-input-enabled"> 
+                            Enable Universal Input Manager
+                        </label>
+                        <label for="assistive-input-method">Active Assistive Method:</label>
+                        <select id="assistive-input-method">
+                            <option value="keyboard">Keyboard</option>
+                            <option value="switch">Switch (F1 advance/select)</option>
+                            <option value="eyeGaze">Eye-Gaze (placeholder)</option>
+                            <option value="touch">Touch</option>
+                        </select>
+                        <small class="field-help">Use F1/F2 to test switch scanning; overlay will appear when enabled.</small>
                     </fieldset>
                 </form>
             </div>
@@ -279,9 +299,10 @@
                         <div class="form-group">
                             <label for="input-buffer">Input Buffer Time:</label>
                             <div class="input-with-value">
-                                <input type="range" id="input-buffer" min="0" max="1000" value="300" step="50">
+                                <input type="range" id="input-buffer" min="0" max="450" value="300" step="50">
                                 <span id="input-buffer-value" class="range-value">300ms</span>
                             </div>
+                            <small class="field-help">Range: 0–450ms (50ms steps). Higher buffers improve forgiveness but may feel less responsive.</small>
                         </div>
                     </fieldset>
                     
@@ -327,7 +348,7 @@
             <div class="modal-body">
                 <div class="replay-input-section">
                     <label for="replay-code-input">Enter Replay Code:</label>
-                    <input type="text" id="replay-code-input" placeholder="e.g., 10000130060110" required>
+                    <input type="text" id="replay-code-input" placeholder="e.g., 1000013006011013" required>
                 </div>
             </div>
             <div class="modal-footer">
@@ -514,8 +535,109 @@
     <div aria-live="polite" id="game-status" class="sr-only"></div>
     <div aria-live="assertive" id="game-alerts" class="sr-only"></div>
 
-    <!-- Game Script -->
+    <!-- Core Scripts (architecture scaffolding) -->
+    <script src="core/events.js"></script>
+    <script src="core/scene-manager.js"></script>
+    <script src="core/engine.js"></script>
+    <script src="core/replay-code.js"></script>
+    <!-- Modular helpers (must load before game.js which delegates to them) -->
+    <script src="core/modules/replay-helpers.js"></script>
+    <script src="a11y/announcer.js"></script>
+    <script src="core/modules/target-generation.js"></script>
+    <script src="core/modules/session-timing.js"></script>
+    <script src="core/modules/input-handling.js"></script>
+    <script src="core/modules/collision-effects.js"></script>
+    <script src="core/modules/ui-session.js"></script>
+    <script src="core/modules/resize-handling.js"></script>
+    <!-- Load main game class early so window.DirectionalSkillsGame exists before scenes -->
     <script src="game.js"></script>
+    <script src="core/game-scene.js"></script>
+    <script src="core/menu-scene.js"></script>
+    <script src="core/results-scene.js"></script>
+    <!-- Modal / auxiliary scene scripts (previously missing) -->
+    <script src="core/base-modal-scene.js"></script>
+    <script src="core/help-scene.js"></script>
+    <script src="core/stats-scene.js"></script>
+    <script src="core/settings-scene.js"></script>
+    <script src="core/session-scene.js"></script>
+    <script src="core/replay-scene.js"></script>
+    <script src="core/pause-scene.js"></script>
+    <script src="mini-games/registry.js"></script>
+    <script src="mini-games/directional-practice.js"></script>
+    <script src="input-manager.js"></script>
+
+    <!-- Switch scanning overlay (shown when Switch input is enabled) -->
+    <div id="switch-overlay" role="region" aria-label="Switch scanning overlay" style="display:none"></div>
+
+    <!-- Game bootstrap (initialization + scene wiring) -->
+            <script>
+                // Bootstrap the SceneManager + Engine and mount the main game scene once DOM is ready
+                window.addEventListener('DOMContentLoaded', function () {
+                    // Fallback init (should already be initialized by immediate block below if DOM was ready)
+                    if (!window.game && window.DirectionalSkillsGame) {
+                        try { window.game = new window.DirectionalSkillsGame(); console.log('[Bootstrap] Game instance created on DOMContentLoaded'); } catch (e) { console.error('[Bootstrap] Game init failed on DOMContentLoaded', e); }
+                    } else {
+                        console.log('[Bootstrap] DOMContentLoaded: window.game exists?', !!window.game);
+                    }
+                    if (!window.SceneManager || !window.Engine || !window.GameScene) return;
+                    try {
+                        // Optional kill-switch: add ?engine=off to the URL to skip external engine
+                        var params = new URLSearchParams(window.location.search);
+                        if (params.get('engine') === 'off') {
+                            console.warn('External engine disabled via URL param ?engine=off');
+                            return;
+                        }
+
+                        var canvas = document.getElementById('game-canvas');
+                        var ctx = canvas ? canvas.getContext('2d') : null;
+                        if (!ctx) return;
+                        window.sceneManager = window.sceneManager || new window.SceneManager();
+                        window.engine = window.engine || new window.Engine(ctx);
+                                    // Register scenes and switch to main scene wrapping existing game instance
+                        if (!window._mainSceneRegistered) {
+                            // Core scenes
+                            if (window.GameScene) window.sceneManager.register('main', new window.GameScene());
+                            if (window.MenuScene) window.sceneManager.register('menu', new window.MenuScene());
+                            if (window.ResultsScene) window.sceneManager.register('results', new window.ResultsScene());
+                            // Modal / auxiliary scenes (ensure they exist before registering)
+                            if (window.HelpScene) window.sceneManager.register('help', new window.HelpScene());
+                            if (window.StatsScene) window.sceneManager.register('stats', new window.StatsScene());
+                            if (window.SettingsScene) window.sceneManager.register('settings', new window.SettingsScene());
+                            if (window.SessionScene) window.sceneManager.register('session', new window.SessionScene());
+                            if (window.ReplayScene) window.sceneManager.register('replay', new window.ReplayScene());
+                            if (window.PauseScene) window.sceneManager.register('pause', new window.PauseScene());
+                            console.log('[Bootstrap] Scenes registered:', Array.from(window.sceneManager.scenes.keys()));
+                            window._mainSceneRegistered = true;
+                        }
+                                    // Default to menu, then switch to main when a session starts
+                                    window.sceneManager.switch('menu');
+                                    // Non-breaking: keep DOM buttons working; when a session starts, switch to main
+                                    // Removed generic #start-session -> main scene auto-switch.
+                                    // SessionScene / game.startNewSession() now explicitly performs scene switch
+                                    // to avoid premature menu flash and double scene transitions.
+                        if (!window.engine.running) {
+                            window.engine.start(window.sceneManager);
+                        }
+
+                        // Lightweight input delegation (non-breaking): forward key events to the active scene if supported
+                        function forwardInput(evt) {
+                            try { if (window.sceneManager && typeof window.sceneManager.handleInput === 'function') { window.sceneManager.handleInput(evt); } } catch (e) {}
+                        }
+                        window.addEventListener('keydown', forwardInput, { capture: true });
+                        window.addEventListener('keyup', forwardInput, { capture: true });
+                    } catch (e) {
+                        console.warn('Engine bootstrap failed:', e);
+                    }
+                });
+                // Immediate (synchronous) init in case users click before DOMContentLoaded or event timing issues
+                (function immediateGameInit(){
+                    if (!window.game && window.DirectionalSkillsGame && document.readyState !== 'loading') {
+                        try { window.game = new window.DirectionalSkillsGame(); console.log('[Bootstrap] Game instance created immediately (readyState=' + document.readyState + ')'); } catch (e) { console.error('[Bootstrap] Immediate game init failed', e); }
+                    } else {
+                        console.log('[Bootstrap] Immediate init skipped. readyState=' + document.readyState + ' hasGame=' + !!window.game + ' hasClass=' + !!window.DirectionalSkillsGame);
+                    }
+                })();
+            </script>
 </body>
 </html>< ! - -   T r i g g e r   P a g e s   d e p l o y m e n t   - - > 
  

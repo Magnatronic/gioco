@@ -5,6 +5,8 @@
 
 class DirectionalSkillsGame {
     constructor() {
+    // Debug logging flag (enable via ?debug=1 in URL for ad-hoc diagnostics)
+    this.debug = /[?&]debug=1/i.test(window.location.search);
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
         this.gameState = 'menu'; // menu, playing, paused, completed
@@ -95,6 +97,51 @@ class DirectionalSkillsGame {
         this.loadSettings();
         this.setupEventListeners();
         this.setupAccessibility();
+
+        // Register all modal scenes with SceneManager if available
+        if (window.sceneManager) {
+            if (window.HelpScene) window.sceneManager.register('help', new window.HelpScene());
+            if (window.StatsScene) window.sceneManager.register('stats', new window.StatsScene());
+            if (window.SettingsScene) window.sceneManager.register('settings', new window.SettingsScene());
+            if (window.SessionScene) window.sceneManager.register('session', new window.SessionScene());
+            if (window.ReplayScene) window.sceneManager.register('replay', new window.ReplayScene());
+            if (window.PauseScene) window.sceneManager.register('pause', new window.PauseScene());
+            if (window.ResultsScene) window.sceneManager.register('results', new window.ResultsScene());
+        }
+
+        // Optional: Universal Input Manager (off by default for safety)
+        this.useUniversalInput = true;
+        if (window.UniversalInputManager) {
+            this.inputBridge = new window.UniversalInputManager();
+            if (this.useUniversalInput) {
+                this.enableUniversalInputBridge();
+                // Default to keyboard on load; settings panel can change this later
+                this.inputBridge.switchInputMethod('keyboard');
+            }
+            // Reflect current method in UI
+            const updateInputLabel = () => {
+                const el = document.getElementById('current-input-method');
+                if (el && this.inputBridge) el.textContent = this.inputBridge.activeMethod ? this.inputBridge.activeMethod : 'Keyboard';
+            };
+            updateInputLabel();
+            this.inputBridge.on('system', (evt) => {
+                if (evt.data && evt.data.type === 'inputMethodChanged') updateInputLabel();
+            });
+            // URL param support: ?input=keyboard|switch|eyeGaze|touch
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const method = params.get('input');
+                const allowed = ['keyboard', 'switch', 'eyeGaze', 'touch'];
+                if (method && allowed.includes(method)) {
+                    if (!this.useUniversalInput) {
+                        this.useUniversalInput = true;
+                        this.enableUniversalInputBridge();
+                    }
+                    this.inputBridge.switchInputMethod(method);
+                    updateInputLabel();
+                }
+            } catch (e) {}
+        }
         
         // Initialize session but don't start
         this.initializeNewSession();
@@ -102,8 +149,18 @@ class DirectionalSkillsGame {
         // Start with main menu visible
         this.showMainMenu();
         
-        // Start game loop
-        this.gameLoop();
+        // Start game loop only if no external engine is planned to drive updates
+        // Detect bootstrap: presence of Engine + SceneManager and not disabled via ?engine=off
+        const urlParams = new URLSearchParams(window.location.search);
+        const externalEngineDisabled = urlParams.get('engine') === 'off';
+        const externalEngineAvailable = !!(window.Engine && window.SceneManager);
+        if (!externalEngineAvailable || externalEngineDisabled) {
+            // Fall back to legacy loop
+            this.gameLoop();
+        } else {
+            // External engine will take over via GameScene; avoid even the first legacy tick
+            window.__SCENE_ENGINE_ACTIVE__ = true;
+        }
         
         // Update UI
         this.updateUI();
@@ -111,7 +168,55 @@ class DirectionalSkillsGame {
         
         // Make testing available globally for easy debugging
         window.testReplaySystem = () => this.testReplayCodeAccuracy();
-        console.log('🧪 To test replay code accuracy, run: testReplaySystem()');
+        this._log('🧪 To test replay code accuracy, run: testReplaySystem()');
+    }
+
+    enableUniversalInputBridge() {
+        if (!this.inputBridge) return;
+        // Feed events into existing input handlers
+        this.inputBridge.on('movement', (evt) => {
+            const dir = evt.data.direction;
+            if (!dir) return;
+            // Start timed session on first input
+            if (this.gameState === 'ready') this.beginTimedSession();
+            if (dir === 'stop') {
+                // No-op; discrete movement relies on key state
+                return;
+            }
+            if (this.sessionConfig.inputMethod === 'continuous') {
+                this.setContinuousDirection(dir);
+            } else if (this.sessionConfig.inputMethod === 'discrete') {
+                // Directly move a small step to emulate key repeat when buffer enabled
+                this.movePlayer(dir);
+            }
+        });
+        this.inputBridge.on('action', (evt) => {
+            const action = evt.data.action;
+            if (action === 'pause') this.togglePlayPause();
+            if (action === 'confirm') this.startSession();
+            if (action === 'tap' && this.sessionConfig.inputMethod === 'mouse') {
+                // Map tap to click-to-move center point when possible
+                const coords = evt.data.coordinates;
+                if (coords) {
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.player.targetX = coords.x - rect.left;
+                    this.player.targetY = coords.y - rect.top;
+                    if (this.gameState === 'ready') this.beginTimedSession();
+                }
+            }
+        });
+        this.inputBridge.on('interface', (evt) => {
+            const cmd = evt.data.command;
+            if (cmd === 'menu') this.returnToMainMenu();
+            if (cmd === 'help') this.openHelp();
+            if (cmd === 'mute') this.toggleSound();
+        });
+        this._log('Universal Input Bridge enabled');
+    }
+
+    // Guarded logger
+    _log(...args) {
+        if (this.debug) console.log(...args);
     }
     
     showMainMenu() {
@@ -200,7 +305,12 @@ class DirectionalSkillsGame {
             pausedTime: 0,
             pauseStartTime: null,
             targetsCollected: 0,
-            totalTargets: this.sessionConfig.targetCount,
+            // Track only core targets for progress (stationary + moving + flee)
+            totalTargets: (
+                (this.sessionConfig.targetCounts?.stationary || 0) +
+                (this.sessionConfig.targetCounts?.moving || 0) +
+                (this.sessionConfig.targetCounts?.flee || 0)
+            ),
             coreTargetsCollected: 0, // Track core targets separately
             bonusTargetsCollected: 0, // Track bonus targets
             hazardTargetsHit: 0, // Track hazard targets hit
@@ -224,21 +334,15 @@ class DirectionalSkillsGame {
     }
     
     startSession() {
-        // Start in "ready" state - timer doesn't start until first input
-        this.gameState = 'ready';
-        this.canvas.focus();
-        this.updatePlayPauseButton();
-        this.announceToScreenReader('Session ready. Press any movement key or click to start the timer and begin.');
+        if(window.DSG && window.DSG.sessionTiming){ window.DSG.sessionTiming.startSession(this); return; }
+        // Fallback if module missing
+        this.gameState='ready'; this.canvas.focus(); this.updatePlayPauseButton();
     }
     
     // New method to actually begin the timed session
     beginTimedSession() {
-        if (this.gameState !== 'ready') return;
-        
-        this.currentSession.startTime = Date.now();
-        this.gameState = 'playing';
-        this.updatePlayPauseButton();
-        this.announceToScreenReader('Timer started! Collect all targets as quickly as possible.');
+        if(window.DSG && window.DSG.sessionTiming){ window.DSG.sessionTiming.beginTimedSession(this); return; }
+        if(this.gameState!=='ready') return; this.currentSession.startTime=Date.now(); this.gameState='playing'; this.updatePlayPauseButton();
     }
     
     completeSession() {
@@ -256,7 +360,7 @@ class DirectionalSkillsGame {
         this.saveSessionHistory();
         
         this.gameState = 'completed';
-        this.showSessionResults();
+    this.showSessionResults();
         
         // Play completion sound
         if (this.sounds.levelComplete) this.sounds.levelComplete();
@@ -265,163 +369,22 @@ class DirectionalSkillsGame {
     }
     
     calculateSessionTime() {
-        if (!this.currentSession.startTime) return 0;
-        
-        const endTime = this.currentSession.endTime || Date.now();
-        const totalTime = endTime - this.currentSession.startTime;
-        const adjustedTime = totalTime - this.currentSession.pausedTime + (this.currentSession.timeAdjustments * 1000);
-        return Math.max(0, adjustedTime); // Ensure time can't go negative
+        if(window.DSG && window.DSG.sessionTiming) return window.DSG.sessionTiming.calculateSessionTime(this);
+        if(!this.currentSession.startTime) return 0; const endTime=this.currentSession.endTime||Date.now(); const total=endTime-this.currentSession.startTime; return total - this.currentSession.pausedTime + (this.currentSession.timeAdjustments*1000);
     }
     
     formatTime(milliseconds) {
-        const seconds = Math.floor(milliseconds / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        const ms = Math.floor((milliseconds % 1000) / 10); // Show centiseconds
-        
-        if (minutes > 0) {
-            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
-        } else {
-            return `${remainingSeconds}.${ms.toString().padStart(2, '0')}s`;
-        }
+        if(window.DSG && window.DSG.sessionTiming) return window.DSG.sessionTiming.formatTime(milliseconds);
+        const neg=milliseconds<0; const abs=Math.abs(milliseconds); const s=Math.floor(abs/1000); const m=Math.floor(s/60); const rs=s%60; const cs=Math.floor((abs%1000)/10); const base=m>0?`${m}:${rs.toString().padStart(2,'0')}.${cs.toString().padStart(2,'0')}`:`${rs}.${cs.toString().padStart(2,'0')}s`; return neg?`-${base}`:base;
     }
     
     // Seeded Random Number Generator for reproducible sessions
-    seededRandom() {
-        // Linear Congruential Generator (LCG)
-        this.seedValue = (this.seedValue * 1664525 + 1013904223) % 4294967296;
-        return this.seedValue / 4294967296;
-    }
-    
-    generateSessionTargets() {
-        this.targets = [];
-        
-        // Initialize seeded random number generator right before target generation
-        // This ensures the random state is clean and consistent
-        const numericSeed = this.hashCodeToSeed(this.currentSession.seed);
-        console.log('🌱 Setting seed for target generation:', this.currentSession.seed, '→', numericSeed);
-        this.seedRandom(numericSeed);
-        console.log('🌱 Seed value after initialization:', this.seedValue);
-        
-        // Set player position using seeded random AFTER seed is initialized
-        this.setSeededPlayerPosition();
-        
-        // Debug: Show current configuration
-        console.log('🎯 Generating targets with configuration:', {
-            targetCounts: this.sessionConfig.targetCounts,
-            targetSize: this.sessionConfig.targetSize
-        });
-        
-        console.log('🎯 Canvas dimensions:', this.canvas.width, 'x', this.canvas.height);
-        console.log('🎯 Player position:', Math.round(this.player.x), ',', Math.round(this.player.y));
-        
-        // Get target size from session config
-        const targetSizes = {
-            'small': 20,
-            'medium': 30,
-            'large': 40,
-            'extra-large': 50
-        };
-        const targetSize = targetSizes[this.sessionConfig.targetSize] || 30;
-        
-        // Create targets based on individual counts
-        const targetTypes = ['stationary', 'moving', 'flee', 'bonus', 'hazard'];
-        let totalTargets = 0;
-        
-        for (const type of targetTypes) {
-            const count = this.sessionConfig.targetCounts[type] || 0;
-            totalTargets += count;
-            
-            for (let j = 0; j < count; j++) {
-                // Map 'stationary' back to 'static' for target creation
-                const targetType = type === 'stationary' ? 'static' : type;
-                const target = this.createDeterministicTarget(targetType, targetSize);
-                if (target) {
-                    this.targets.push(target);
-                }
-            }
-        }
-        
-        // Ensure at least one target exists
-        if (totalTargets === 0) {
-            const target = this.createDeterministicTarget('static', targetSize);
-            if (target) {
-                this.targets.push(target);
-                totalTargets = 1;
-            }
-        }
-        
-        this.currentSession.totalTargets = totalTargets;
-        
-        // Update player size to match target size for visual consistency
-        this.player.size = targetSize;
-        
-        // Calculate total core targets (static, moving, flee) for progress tracking
-        this.currentSession.totalCoreTargets = (this.sessionConfig.targetCounts.stationary || 0) + 
-                                               (this.sessionConfig.targetCounts.moving || 0) + 
-                                               (this.sessionConfig.targetCounts.flee || 0);
-        
-        // Ensure at least one core target for a valid session
-        if (this.currentSession.totalCoreTargets === 0 && totalTargets > 0) {
-            // If only bonus/hazard targets, add one static target
-            const target = this.createDeterministicTarget('static', targetSize);
-            if (target) {
-                this.targets.push(target);
-                this.currentSession.totalCoreTargets = 1;
-                totalTargets++;
-            }
-        }
-        
-        this.currentSession.totalTargets = totalTargets;
-        
-        this.updateUI();
-    }
-    
-
-    
-    createDeterministicTarget(type, size) {
-        const margin = size + 20;
-        // Account for metrics overlay in top-left corner (approximately 160px x 60px)
-        const overlayWidth = 160;
-        const overlayHeight = 60;
-        const maxAttempts = 50;
-        
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            const x = margin + this.seededRandom() * (this.canvas.width - 2 * margin);
-            const y = margin + this.seededRandom() * (this.canvas.height - 2 * margin);
-            
-            // Check if target would be under the overlay (top-left corner)
-            const isUnderOverlay = (x < overlayWidth + margin && y < overlayHeight + margin);
-            
-            // Check distance from player
-            const playerDistance = Math.sqrt(
-                Math.pow(x - this.player.x, 2) + Math.pow(y - this.player.y, 2)
-            );
-            
-            if (playerDistance < size * 3 || isUnderOverlay) continue; // Too close to player or under overlay
-            
-            // Check distance from other targets
-            let tooClose = false;
-            for (const existingTarget of this.targets) {
-                const distance = Math.sqrt(
-                    Math.pow(x - existingTarget.x, 2) + Math.pow(y - existingTarget.y, 2)
-                );
-                if (distance < size * 2.5) {
-                    tooClose = true;
-                    break;
-                }
-            }
-            
-            if (!tooClose) {
-                return this.createTargetByType(type, x, y, size, 0);
-            }
-        }
-        
-        // Fallback: create at seeded position if spacing fails
-        const x = margin + this.seededRandom() * (this.canvas.width - 2 * margin);
-        const y = margin + this.seededRandom() * (this.canvas.height - 2 * margin);
-        return this.createTargetByType(type, x, y, size, 0);
-    }
+        seededRandom() { return (window.DSG && window.DSG.targets) ? window.DSG.targets.seededRandom(this) : Math.random(); }
+        generateSessionTargets() { if(window.DSG && window.DSG.targets) { window.DSG.targets.generateSessionTargets(this); } }
+        createDeterministicTarget(type, size) { if(window.DSG && window.DSG.targets) { return window.DSG.targets.createDeterministicTarget(this, type, size); } }
+        setSeededPlayerPosition() { if(window.DSG && window.DSG.targets) { window.DSG.targets.setSeededPlayerPosition(this); } }
+        seedRandom(seed) { if(window.DSG && window.DSG.targets) { window.DSG.targets.seedRandom(this, seed); } else { this.seedValue = seed; } }
+        hashCodeToSeed(code) { if(window.DSG && window.DSG.targets) { return window.DSG.targets.hashCodeToSeed(code); } return 0; }
     
     setupCanvas() {
         // Set canvas size to fill the container
@@ -513,23 +476,7 @@ class DirectionalSkillsGame {
         oscillator.stop(this.audioContext.currentTime + duration);
     }
     
-    // Replay Code Generation System
-    generateReplayCode() {
-        const colors = ['RED', 'BLUE', 'GREEN', 'GOLD', 'PINK', 'CYAN', 'LIME', 'NAVY'];
-        const shapes = ['CIRCLE', 'SQUARE', 'STAR', 'HEART', 'ARROW', 'PLUS', 'CROSS', 'WAVE'];
-        const numbers = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        const shape = shapes[Math.floor(Math.random() * shapes.length)];
-        
-        // Generate 4-character random suffix
-        let suffix = '';
-        for (let i = 0; i < 4; i++) {
-            suffix += numbers[Math.floor(Math.random() * numbers.length)];
-        }
-        
-        return `${color}-${shape}-${suffix}`;
-    }
+    // (Deprecated) Legacy generateReplayCode removed – use generateReplayCodeFromConfig instead.
     
     hashCodeToSeed(code) {
         // Convert replay code to a numeric seed for deterministic generation
@@ -553,9 +500,11 @@ class DirectionalSkillsGame {
     }
     
     setupEventListeners() {
-        // Keyboard events
-        document.addEventListener('keydown', (e) => this.handleKeyDown(e));
-        document.addEventListener('keyup', (e) => this.handleKeyUp(e));
+        // Keyboard events via input module
+        if(window.DSG && window.DSG.input) { window.DSG.input.wireDocumentKeyboard(this); } else {
+            document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+            document.addEventListener('keyup', (e) => this.handleKeyUp(e));
+        }
         
         // Main menu card events
         document.getElementById('configure-session-btn').addEventListener('click', () => this.openSessionSetup());
@@ -584,126 +533,98 @@ class DirectionalSkillsGame {
     }
     
     setupModalEvents() {
-        // Settings modal
-        const settingsModal = document.getElementById('settings-modal');
-        const settingsClose = settingsModal.querySelector('.modal-close');
-        const saveSettings = document.getElementById('save-settings');
-        const cancelSettings = document.getElementById('cancel-settings');
-        
-        settingsClose.addEventListener('click', () => settingsModal.close());
-        saveSettings.addEventListener('click', () => this.saveSettings());
-        cancelSettings.addEventListener('click', () => settingsModal.close());
-        
-        // Help modal
-        const helpModal = document.getElementById('help-modal');
-        const helpClose = helpModal.querySelector('.modal-close');
-        const closeHelp = document.getElementById('close-help');
-        
-        helpClose.addEventListener('click', () => {
-            helpModal.close();
-            if (this.gameState === 'menu') this.showMainMenu();
-        });
-        closeHelp.addEventListener('click', () => {
-            helpModal.close();
-            if (this.gameState === 'menu') this.showMainMenu();
-        });
-        
-        // Stats modal
-        const statsModal = document.getElementById('stats-modal');
-        const statsClose = statsModal.querySelector('.modal-close');
-        const closeStats = document.getElementById('close-stats');
-        
-        statsClose.addEventListener('click', () => {
-            statsModal.close();
-            if (this.gameState === 'menu') this.showMainMenu();
-        });
-        closeStats.addEventListener('click', () => {
-            statsModal.close();
-            if (this.gameState === 'menu') this.showMainMenu();
-        });
-        
-        // Clear history button
+        // Only attach fallback listeners when corresponding scene is unavailable
+        const attachIfNoScene = (sceneCtor, modalId, bindingsFn) => {
+            const hasScene = !!(window.sceneManager && sceneCtor);
+            if (!hasScene) bindingsFn();
+        };
+
+        // Clear history button (not scene managed)
         const clearHistoryBtn = document.getElementById('clear-history-btn');
-        clearHistoryBtn.addEventListener('click', () => this.clearHistory());
-        
-        // Session modal
-        const sessionModal = document.getElementById('session-modal');
-        const sessionClose = sessionModal.querySelector('.modal-close');
-        const startSession = document.getElementById('start-session');
-        const cancelSession = document.getElementById('cancel-session');
-        
-        sessionClose.addEventListener('click', () => sessionModal.close());
-        startSession.addEventListener('click', () => this.startNewSession());
-        cancelSession.addEventListener('click', () => sessionModal.close());
-        
-        // Replay modal
-        const replayModal = document.getElementById('replay-modal');
-        const replayClose = replayModal.querySelector('.modal-close');
-        const startReplay = document.getElementById('start-replay');
-        const cancelReplay = document.getElementById('cancel-replay');
-        
-        replayClose.addEventListener('click', () => replayModal.close());
-        startReplay.addEventListener('click', () => this.startReplaySession());
-        cancelReplay.addEventListener('click', () => replayModal.close());
-        
-        // Session results modal
-        const resultsModal = document.getElementById('results-modal');
-        const resultsClose = resultsModal.querySelector('.modal-close');
-        const replayGame = document.getElementById('replay-game');
-        const newSession = document.getElementById('new-session');
-        const closeResults = document.getElementById('close-results');
-        
-        resultsClose.addEventListener('click', () => {
-            resultsModal.close();
-            this.returnToMainMenu();
+        if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', () => this.clearHistory());
+
+        attachIfNoScene(window.SettingsScene, 'settings-modal', () => {
+            const modal = document.getElementById('settings-modal');
+            if (!modal) return;
+            const closeBtn = modal.querySelector('.modal-close');
+            const saveBtn = document.getElementById('save-settings');
+            const cancelBtn = document.getElementById('cancel-settings');
+            if (closeBtn) closeBtn.addEventListener('click', () => modal.close());
+            if (saveBtn) saveBtn.addEventListener('click', () => this.saveSettings());
+            if (cancelBtn) cancelBtn.addEventListener('click', () => modal.close());
         });
-        replayGame.addEventListener('click', () => {
-            resultsModal.close();
-            // Restart the game with the same replay code
-            this.initializeNewSession(this.currentSession.seed);
-            this.startSession();
+
+        attachIfNoScene(window.HelpScene, 'help-modal', () => {
+            const modal = document.getElementById('help-modal');
+            if (!modal) return;
+            const closeBtns = [modal.querySelector('.modal-close'), document.getElementById('close-help')];
+            closeBtns.forEach(btn => btn && btn.addEventListener('click', () => {
+                modal.close();
+                if (this.gameState === 'menu') this.showMainMenu();
+            }));
         });
-        newSession.addEventListener('click', () => {
-            resultsModal.close();
-            this.openSessionSetup();
+
+        attachIfNoScene(window.StatsScene, 'stats-modal', () => {
+            const modal = document.getElementById('stats-modal');
+            if (!modal) return;
+            const closeBtns = [modal.querySelector('.modal-close'), document.getElementById('close-stats')];
+            closeBtns.forEach(btn => btn && btn.addEventListener('click', () => {
+                modal.close();
+                if (this.gameState === 'menu') this.showMainMenu();
+            }));
         });
-        closeResults.addEventListener('click', () => {
-            resultsModal.close();
-            this.returnToMainMenu();
+
+        attachIfNoScene(window.SessionScene, 'session-modal', () => {
+            const modal = document.getElementById('session-modal');
+            if (!modal) return;
+            const closeBtn = modal.querySelector('.modal-close');
+            const startBtn = document.getElementById('start-session');
+            const cancelBtn = document.getElementById('cancel-session');
+            if (closeBtn) closeBtn.addEventListener('click', () => modal.close());
+            if (cancelBtn) cancelBtn.addEventListener('click', () => modal.close());
+            if (startBtn) startBtn.addEventListener('click', () => this.startNewSession());
         });
-        
-        // Pause modal
-        const pauseModal = document.getElementById('pause-modal');
-        const resumeSessionBtn = document.getElementById('resume-session-btn');
-        const quitSessionBtn = document.getElementById('quit-session-btn');
-        
-        resumeSessionBtn.addEventListener('click', () => {
-            this.hidePauseModal();
-            this.resumeGame();
+
+        attachIfNoScene(window.ReplayScene, 'replay-modal', () => {
+            const modal = document.getElementById('replay-modal');
+            if (!modal) return;
+            const closeBtn = modal.querySelector('.modal-close');
+            const startBtn = document.getElementById('start-replay');
+            const cancelBtn = document.getElementById('cancel-replay');
+            if (closeBtn) closeBtn.addEventListener('click', () => modal.close());
+            if (cancelBtn) cancelBtn.addEventListener('click', () => modal.close());
+            if (startBtn) startBtn.addEventListener('click', () => this.startReplaySession());
         });
-        
-        quitSessionBtn.addEventListener('click', () => {
-            this.hidePauseModal();
-            this.returnToMainMenu();
-        });
-        
-        // Setup session form interactivity
-        this.setupSessionFormEvents();
-        
-        // Close modals on backdrop click
-        [settingsModal, helpModal, statsModal, sessionModal, replayModal, resultsModal, pauseModal].forEach(modal => {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.close();
-                    // Handle specific modal close behaviors
-                    if (modal === resultsModal) {
-                        this.returnToMainMenu();
-                    } else if ((modal === helpModal || modal === statsModal) && this.gameState === 'menu') {
-                        this.showMainMenu();
-                    }
-                }
+
+        attachIfNoScene(window.ResultsScene, 'results-modal', () => {
+            const modal = document.getElementById('results-modal');
+            if (!modal) return;
+            const replayBtn = document.getElementById('replay-game');
+            const newBtn = document.getElementById('new-session');
+            const closeBtn = document.getElementById('close-results');
+            const modalClose = modal.querySelector('.modal-close');
+            const toMenu = () => this.returnToMainMenu();
+            if (modalClose) modalClose.addEventListener('click', () => { modal.close(); toMenu(); });
+            if (closeBtn) closeBtn.addEventListener('click', () => { modal.close(); toMenu(); });
+            if (replayBtn) replayBtn.addEventListener('click', () => {
+                modal.close();
+                this.initializeNewSession(this.currentSession.seed);
+                this.startSession();
             });
+            if (newBtn) newBtn.addEventListener('click', () => { modal.close(); this.openSessionSetup(); });
         });
+
+        attachIfNoScene(window.PauseScene, 'pause-modal', () => {
+            const modal = document.getElementById('pause-modal');
+            if (!modal) return;
+            const resumeBtn = document.getElementById('resume-session-btn');
+            const quitBtn = document.getElementById('quit-session-btn');
+            if (resumeBtn) resumeBtn.addEventListener('click', () => { this.hidePauseModal(); this.resumeGame(); });
+            if (quitBtn) quitBtn.addEventListener('click', () => { this.hidePauseModal(); this.returnToMainMenu(); });
+        });
+
+        // Session form interactivity always needed
+        this.setupSessionFormEvents();
     }
     
     setupAccessibility() {
@@ -741,91 +662,15 @@ class DirectionalSkillsGame {
     }
     
     handleKeyDown(e) {
-        this.keys[e.code] = true;
-        
-        // Handle special keys
-        switch(e.code) {
-            case 'Space':
-                e.preventDefault();
-                // Check if pause modal is open
-                const pauseModal = document.getElementById('pause-modal');
-                if (pauseModal && pauseModal.open) {
-                    // Space resumes from pause modal
-                    this.hidePauseModal();
-                    this.resumeGame();
-                } else {
-                    this.togglePlayPause();
-                }
-                break;
-            case 'Escape':
-                e.preventDefault();
-                // Check if pause modal is open
-                const pauseModalForEsc = document.getElementById('pause-modal');
-                if (pauseModalForEsc && pauseModalForEsc.open) {
-                    // ESC quits from pause modal
-                    this.hidePauseModal();
-                    this.returnToMainMenu();
-                } else if (this.gameState === 'playing') {
-                    this.pauseGame();
-                    // Show pause modal after a short delay
-                    setTimeout(() => {
-                        this.showPauseModal();
-                    }, 100);
-                } else if (this.gameState === 'paused') {
-                    this.showPauseModal();
-                } else if (this.gameState === 'menu') {
-                    // Already in menu, ESC does nothing
-                }
-                break;
-            case 'F1':
-                e.preventDefault();
-                this.openHelp();
-                break;
-            case 'F11':
-                e.preventDefault();
-                this.toggleFullscreen();
-                break;
-        }
-        
-        // Handle movement keys
-        if (this.gameState === 'playing' || this.gameState === 'ready') {
-            this.handleMovementInput(e.code);
-        }
+        if(window.DSG && window.DSG.input){ window.DSG.input.handleKeyDown(this,e); return; }
     }
     
     handleKeyUp(e) {
-        this.keys[e.code] = false;
+        if(window.DSG && window.DSG.input){ window.DSG.input.handleKeyUp(this,e); return; }
     }
     
     handleMovementInput(keyCode) {
-        const movementKeys = {
-            'ArrowUp': 'up',
-            'ArrowDown': 'down',
-            'ArrowLeft': 'left',
-            'ArrowRight': 'right',
-            'KeyW': 'up',
-            'KeyS': 'down',
-            'KeyA': 'left',
-            'KeyD': 'right'
-        };
-        
-        const direction = movementKeys[keyCode];
-        if (direction) {
-            // Start timer on first movement input
-            if (this.gameState === 'ready') {
-                this.beginTimedSession();
-            }
-            
-            if (this.sessionConfig.inputMethod === 'continuous') {
-                // Continuous movement: single press changes direction
-                this.setContinuousDirection(direction);
-            } else if (this.sessionConfig.inputMethod === 'discrete') {
-                // Discrete movement: traditional press-and-hold (handled in updateDiscreteMovement)
-                // We don't need to do anything here since discrete movement 
-                // is handled continuously in the update loop
-            }
-            // Mouse mode ignores keyboard input
-        }
+        if(window.DSG && window.DSG.input){ window.DSG.input.handleMovementInput(this,keyCode); }
     }
     
     setContinuousDirection(direction) {
@@ -888,348 +733,21 @@ class DirectionalSkillsGame {
 
     // Mouse Input Handlers
     handleMouseClick(e) {
-        if (this.sessionConfig.inputMethod !== 'mouse' || (this.gameState !== 'playing' && this.gameState !== 'ready')) return;
-        
-        // Start timer on first mouse click
-        if (this.gameState === 'ready') {
-            this.beginTimedSession();
-        }
-        
-        const rect = this.canvas.getBoundingClientRect();
-        const targetX = e.clientX - rect.left;
-        const targetY = e.clientY - rect.top;
-        
-        // Set target position for player to move towards
-        this.player.targetX = targetX;
-        this.player.targetY = targetY;
-        
-        // Play movement sound
-        if (this.sounds.move) this.sounds.move();
-        
-        this.announceToScreenReader(`Moving to position ${Math.round(targetX)}, ${Math.round(targetY)}`);
+        if(window.DSG && window.DSG.input){ window.DSG.input.handleMouseClick(this,e); }
     }
     
     checkCollisions() {
-        for (let i = this.targets.length - 1; i >= 0; i--) {
-            const target = this.targets[i];
-            
-            // Square player (centered at player.x, player.y with size player.size)
-            // vs circular target (centered at target.x, target.y with radius target.size)
-            
-            // Find the closest point on the square to the circle center
-            const closestX = Math.max(this.player.x - this.player.size, 
-                                     Math.min(target.x, this.player.x + this.player.size));
-            const closestY = Math.max(this.player.y - this.player.size, 
-                                     Math.min(target.y, this.player.y + this.player.size));
-            
-            // Calculate distance from circle center to closest point on square
-            const dx = target.x - closestX;
-            const dy = target.y - closestY;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance < target.size) {
-                if (target.type === 'hazard') {
-                    this.handleHazardCollision(target, i);
-                } else {
-                    this.collectTarget(i);
-                }
-            }
-        }
+        if(window.DSG && window.DSG.collision){ window.DSG.collision.checkCollisions(this); }
     }
     
     collectTarget(index) {
-        const target = this.targets[index];
-        
-        // Remove target
-        this.targets.splice(index, 1);
-        
-        // Handle different target effects
-        if (target.type === 'bonus') {
-            // Bonus targets reduce time (reward)
-            const timeReduction = target.timeBonus || 5;
-            this.currentSession.timeAdjustments -= timeReduction;
-            this.currentSession.bonusTargetsCollected++;
-            this.currentSession.targetsCollected++; // Count toward total collected
-            console.log(`Bonus target collected! Time reduced by ${timeReduction} seconds`);
-            this.showBonusEffect(timeReduction);
-            this.announceToScreenReader(`Bonus collected! Time reduced by ${timeReduction} seconds.`);
-        } else {
-            // Regular core targets (static, moving, flee) count toward completion
-            this.currentSession.coreTargetsCollected++;
-            this.currentSession.targetsCollected++; // Count toward total collected
-            this.announceToScreenReader(`Target collected! Progress toward completion.`);
-        }
-        
-        // Play collect sound
-        if (this.sounds.collect) this.sounds.collect();
-        
-        // Update UI
-        this.updateUI();
-        
-        // Check if session complete - only core targets (static, moving, fleeing) count toward completion
-        const coreTargets = this.targets.filter(t => ['static', 'moving', 'flee'].includes(t.type));
-        if (coreTargets.length === 0) {
-            this.completeSession();
-        }
+        if(window.DSG && window.DSG.collision){ window.DSG.collision.collectTarget(this,index); }
     }
 
     handleHazardCollision(target, index) {
-        // Apply time penalty
-        const penalty = target.timePenalty || 5;
-        this.currentSession.timeAdjustments += penalty;
-        this.currentSession.hazardTargetsHit++;
-        console.log(`Hazard hit! Time penalty: ${penalty} seconds`);
-        
-        // Remove the hazard target (one-time penalty)
-        this.targets.splice(index, 1);
-        
-        // Visual and audio feedback
-        this.showHazardWarning(penalty);
-        if (this.sounds.warning) this.sounds.warning();
-        
-        // Update UI
-        this.updateUI();
-        
-        // Announce to screen reader
-        this.announceToScreenReader(`Hazard avoided! Time penalty: ${penalty} seconds.`);
-        
-        // Check if session complete - only core targets (static, moving, fleeing) count toward completion
-        const coreTargets = this.targets.filter(t => ['static', 'moving', 'flee'].includes(t.type));
-        if (coreTargets.length === 0) {
-            this.completeSession();
-        }
+        if(window.DSG && window.DSG.collision){ window.DSG.collision.handleHazardCollision(this,target,index); }
     }
-
-    showHazardWarning(penalty) {
-        // Create a visual warning overlay
-        const warning = document.createElement('div');
-        warning.className = 'hazard-warning';
-        warning.innerHTML = `
-            <div class="hazard-warning-content">
-                <div class="hazard-icon">⚠️</div>
-                <div class="hazard-text">Time Penalty</div>
-                <div class="hazard-penalty">+${penalty} seconds</div>
-            </div>
-        `;
-        
-        document.body.appendChild(warning);
-        
-        // Remove warning after animation
-        setTimeout(() => {
-            if (warning.parentNode) {
-                warning.parentNode.removeChild(warning);
-            }
-        }, 2000);
-    }
-
-    showBonusEffect(timeReduction) {
-        // Create a visual bonus overlay
-        const bonus = document.createElement('div');
-        bonus.className = 'bonus-effect';
-        bonus.innerHTML = `
-            <div class="bonus-effect-content">
-                <div class="bonus-icon">⭐</div>
-                <div class="bonus-text">Time Bonus!</div>
-                <div class="bonus-reduction">-${timeReduction} seconds</div>
-            </div>
-        `;
-        
-        document.body.appendChild(bonus);
-        
-        // Remove bonus effect after animation
-        setTimeout(() => {
-            if (bonus.parentNode) {
-                bonus.parentNode.removeChild(bonus);
-            }
-        }, 2000);
-    }
-
-    createPracticeTarget(type, size) {
-        const margin = size + 20;
-        const maxAttempts = 50;
-        
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            const x = margin + Math.random() * (this.canvas.width - 2 * margin);
-            const y = margin + Math.random() * (this.canvas.height - 2 * margin);
-            
-            // Check distance from player
-            const playerDistance = Math.sqrt(
-                Math.pow(x - this.player.x, 2) + Math.pow(y - this.player.y, 2)
-            );
-            
-            if (playerDistance < size * 3) continue; // Too close to player
-            
-            // Check distance from other targets
-            let tooClose = false;
-            for (const existingTarget of this.targets) {
-                const distance = Math.sqrt(
-                    Math.pow(x - existingTarget.x, 2) + Math.pow(y - existingTarget.y, 2)
-                );
-                if (distance < size * 2.5) {
-                    tooClose = true;
-                    break;
-                }
-            }
-            
-            if (!tooClose) {
-                return this.createTargetByType(type, x, y, size, null);
-            }
-        }
-        
-        // Fallback: create at random position if spacing fails
-        const x = margin + Math.random() * (this.canvas.width - 2 * margin);
-        const y = margin + Math.random() * (this.canvas.height - 2 * margin);
-        return this.createTargetByType(type, x, y, size, null);
-    }
-
-    createTargetByType(type, x, y, size, seed = null) {
-        const baseTarget = {
-            x,
-            y,
-            size,
-            type,
-            points: type === 'bonus' ? 200 : 100,
-            collectible: true,
-            createdAt: Date.now()
-        };
-        
-        switch (type) {
-            case 'static':
-                return {
-                    ...baseTarget,
-                    color: '#27ae60' // Green - safe, basic collection
-                };
-                
-            case 'moving':
-                return {
-                    ...baseTarget,
-                    color: '#3498db', // Blue - keep existing, good contrast
-                    velocity: {
-                        x: (this.seededRandom() - 0.5) * 2,
-                        y: (this.seededRandom() - 0.5) * 2
-                    },
-                    pattern: 'linear' // Could be 'linear', 'circular', 'bounce'
-                };
-                
-            case 'flee':
-                return {
-                    ...baseTarget,
-                    color: '#9b59b6', // Purple - advanced challenge, distinct from others
-                    fleeSpeed: 1.5,
-                    detectionRadius: size * 4,
-                    velocity: { x: 0, y: 0 }
-                };
-                
-            case 'bonus':
-                return {
-                    ...baseTarget,
-                    color: '#f39c12', // Gold - valuable reward feeling
-                    bonusMultiplier: 2,
-                    timeBonus: 5 // 5 seconds time reduction
-                };
-                
-            case 'hazard':
-                return {
-                    ...baseTarget,
-                    color: '#e74c3c', // Red - universal danger color
-                    collectible: false, // Cannot be collected for points
-                    timePenalty: 5, // 5 second time penalty
-                    hazardEffect: 'warning' // Visual warning effect
-                };
-                
-            default:
-                return {
-                    ...baseTarget,
-                    color: '#27ae60' // Default to green static
-                };
-        }
-    }
-
-    updatePracticeTargets() {
-        const currentTime = Date.now();
-        
-        for (const target of this.targets) {
-            switch (target.type) {
-                case 'moving':
-                    this.updateMovingTarget(target);
-                    break;
-                    
-                case 'flee':
-                    this.updateFleeTarget(target);
-                    break;
-                    
-                case 'bonus':
-                    this.updateBonusTarget(target, currentTime);
-                    break;
-                    
-                case 'hazard':
-                    this.updateHazardTarget(target, currentTime);
-                    break;
-            }
-        }
-    }
-
-    updateMovingTarget(target) {
-        // Update position
-        target.x += target.velocity.x;
-        target.y += target.velocity.y;
-        
-        // Bounce off walls
-        if (target.x <= target.size || target.x >= this.canvas.width - target.size) {
-            target.velocity.x *= -1;
-            target.x = Math.max(target.size, Math.min(this.canvas.width - target.size, target.x));
-        }
-        
-        if (target.y <= target.size || target.y >= this.canvas.height - target.size) {
-            target.velocity.y *= -1;
-            target.y = Math.max(target.size, Math.min(this.canvas.height - target.size, target.y));
-        }
-    }
-
-    updateFleeTarget(target) {
-        // Calculate distance to player
-        const dx = this.player.x - target.x;
-        const dy = this.player.y - target.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance < target.detectionRadius) {
-            // Player is close, flee in opposite direction
-            const fleeX = distance > 0 ? -(dx / distance) * target.fleeSpeed : 0;
-            const fleeY = distance > 0 ? -(dy / distance) * target.fleeSpeed : 0;
-            
-            target.velocity.x = fleeX;
-            target.velocity.y = fleeY;
-            
-            // Move away from player
-            target.x += target.velocity.x;
-            target.y += target.velocity.y;
-            
-            // Keep within bounds
-            target.x = Math.max(target.size, Math.min(this.canvas.width - target.size, target.x));
-            target.y = Math.max(target.size, Math.min(this.canvas.height - target.size, target.y));
-        } else {
-            // Player is far, gradually slow down
-            target.velocity.x *= 0.95;
-            target.velocity.y *= 0.95;
-            
-            if (Math.abs(target.velocity.x) > 0.1 || Math.abs(target.velocity.y) > 0.1) {
-                target.x += target.velocity.x;
-                target.y += target.velocity.y;
-                
-                // Keep within bounds
-                target.x = Math.max(target.size, Math.min(this.canvas.width - target.size, target.x));
-                target.y = Math.max(target.size, Math.min(this.canvas.height - target.size, target.y));
-            }
-        }
-    }
-
-    updateBonusTarget(target, currentTime) {
-        // No pulse animation updates needed - bonus targets are now static
-    }
-
-    updateHazardTarget(target, currentTime) {
-        // No pulse animation updates needed - hazard targets are now static
-    }
+    // Target behavior & creation logic moved to DSG.targets/collision modules (pruned legacy helpers)
     
     getLevelConfig(level) {
         const baseConfig = {
@@ -1378,9 +896,12 @@ class DirectionalSkillsGame {
     }
     
     gameLoop() {
-        this.update();
-        this.render();
-        requestAnimationFrame(() => this.gameLoop());
+        // Keep existing loop unless an external Engine is driving updates
+        if (!window.__SCENE_ENGINE_ACTIVE__) {
+            this.update();
+            this.render();
+            requestAnimationFrame(() => this.gameLoop());
+        }
     }
     
     update() {
@@ -1932,91 +1453,19 @@ class DirectionalSkillsGame {
     
     // UI Management
     updateTimerDisplay() {
-        if (this.currentSession && this.currentSession.startTime) {
-            const sessionTime = this.calculateSessionTime();
-            document.getElementById('current-session-time').textContent = this.formatTime(sessionTime);
-        } else {
-            // Show 00:00 when session hasn't started
-            document.getElementById('current-session-time').textContent = '00:00';
-        }
+        if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateTimerDisplay(this); }
     }
     
     updateUI() {
-        // Update timer display
-        this.updateTimerDisplay();
-        
-        // Update progress bar - only count core targets for progress
-        const coreTargets = this.targets.filter(t => ['static', 'moving', 'flee'].includes(t.type));
-        const coreTargetsCollected = this.currentSession.totalCoreTargets - coreTargets.length;
-        const progress = this.currentSession.totalCoreTargets > 0 ? 
-            (coreTargetsCollected / this.currentSession.totalCoreTargets) * 100 : 100;
-        document.getElementById('progress-fill').style.width = `${progress}%`;
-        
-        // Update stats modal with session-based statistics
-        this.updateStatsModal();
+        if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateUI(this); }
     }
     
     updateStatsModal() {
-        // Calculate total sessions and targets from history
-        const totalSessions = this.sessionHistory.length;
-        const totalTargets = this.sessionHistory.reduce((sum, session) => sum + session.targetsCollected, 0);
-        
-        // Update summary stats (removed best time and average time)
-        document.getElementById('stats-sessions').textContent = totalSessions;
-        document.getElementById('stats-targets').textContent = totalTargets;
-        
-        // Update session history
-        this.updateSessionHistory();
+        if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateStatsModal(this); }
     }
     
     updateSessionHistory() {
-        const historyContainer = document.getElementById('session-history');
-        
-        if (this.sessionHistory.length === 0) {
-            historyContainer.innerHTML = `
-                <div class="no-sessions">
-                    <p>No sessions completed yet.</p>
-                    <p>Complete your first session to see your progress history!</p>
-                </div>
-            `;
-            return;
-        }
-        
-        // Show recent sessions (last 10, most recent first)
-        const recentSessions = [...this.sessionHistory].reverse();
-        
-        historyContainer.innerHTML = recentSessions.map((session, index) => {
-            const date = new Date(session.endTime || session.startTime);
-            const timeStr = this.formatTime(session.totalTime);
-            const replayCode = session.seed || 'N/A';
-            const dateStr = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-            
-            return `
-                <div class="session-item" data-session-index="${index}">
-                    <div class="session-time">${timeStr}</div>
-                    <div class="session-details">
-                        <div class="session-replay-info">
-                            <div class="replay-code">${replayCode}</div>
-                            <div class="session-date">${dateStr}</div>
-                            <button class="copy-replay-btn" data-replay-code="${replayCode}" 
-                                    title="Copy replay code">
-                                Copy
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        // Add event listeners for copy buttons
-        const copyButtons = historyContainer.querySelectorAll('.copy-replay-btn');
-        copyButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                e.preventDefault();
-                const replayCode = button.getAttribute('data-replay-code');
-                this.copyReplayCode(replayCode);
-            });
-        });
+        if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateSessionHistory(this); }
     }
     
     copyReplayCode(replayCode) {
@@ -2039,28 +1488,8 @@ class DirectionalSkillsGame {
         }
     }
     
-    fallbackCopyToClipboard(text) {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        
-        try {
-            document.execCommand('copy');
-            this.announceToScreenReader(`Replay code ${text} copied to clipboard`);
-            this.showToast(`Replay code copied: ${text}`);
-        } catch (err) {
-            console.warn('Fallback copy failed:', err);
-            this.announceToScreenReader('Failed to copy replay code');
-        }
-        
-        document.body.removeChild(textArea);
-    }
+    // NOTE: unified fallbackCopyToClipboard defined once (duplicate removed further below)
+    fallbackCopyToClipboard(text) { this._fallbackCopyToClipboardUnified(text); }
     
     showToast(message) {
         // Create a simple toast notification
@@ -2151,29 +1580,22 @@ class DirectionalSkillsGame {
     // Modal Management
     openSettings() {
         this.pauseGame();
-        const modal = document.getElementById('settings-modal');
-        this.loadSettingsToForm();
-        modal.showModal();
+    if (window.sceneManager && window.SettingsScene) window.sceneManager.switch('settings');
     }
     
     openStats() {
         this.pauseGame();
-        const modal = document.getElementById('stats-modal');
-        modal.showModal();
+    if (window.sceneManager && window.StatsScene) window.sceneManager.switch('stats');
     }
     
     openHelp() {
         this.pauseGame();
-        const modal = document.getElementById('help-modal');
-        modal.showModal();
+    if (window.sceneManager && window.HelpScene) window.sceneManager.switch('help');
     }
     
     openReplayEntry() {
         this.pauseGame();
-        const modal = document.getElementById('replay-modal');
-        // Clear any previous input
-        document.getElementById('replay-code-input').value = '';
-        modal.showModal();
+    if (window.sceneManager && window.ReplayScene) window.sceneManager.switch('replay');
     }
     
     loadSettingsToForm() {
@@ -2190,6 +1612,25 @@ class DirectionalSkillsGame {
         this.settings.reducedMotion = document.getElementById('reduced-motion').checked;
         this.settings.audioEnabled = document.getElementById('audio-enabled').checked;
         this.settings.resizeHandling = document.getElementById('resize-handling').value;
+
+        // Assistive input settings
+        const universalEnabledEl = document.getElementById('universal-input-enabled');
+        const assistiveMethodEl = document.getElementById('assistive-input-method');
+        if (universalEnabledEl) {
+            this.useUniversalInput = universalEnabledEl.checked;
+            if (this.inputBridge) {
+                if (this.useUniversalInput) {
+                    this.enableUniversalInputBridge();
+                } else {
+                    // Soft disable by switching to keyboard method and clearing queue
+                    this.inputBridge.switchInputMethod('keyboard');
+                    this.inputBridge.clearEvents();
+                }
+            }
+        }
+        if (assistiveMethodEl && this.inputBridge) {
+            this.inputBridge.switchInputMethod(assistiveMethodEl.value);
+        }
         
         // Apply settings
         this.applySettings();
@@ -2227,15 +1668,26 @@ class DirectionalSkillsGame {
         if (this.settings.audioEnabled && !this.audioContext) {
             this.setupAudio();
         }
+
+        // Sync Assistive Input form values if present
+        const universalEnabledEl = document.getElementById('universal-input-enabled');
+        const assistiveMethodEl = document.getElementById('assistive-input-method');
+        if (universalEnabledEl) universalEnabledEl.checked = !!this.useUniversalInput;
+        if (assistiveMethodEl && this.inputBridge) {
+            assistiveMethodEl.value = this.inputBridge.activeMethod || 'keyboard';
+        }
     }
 
     // Session Management Methods
     openSessionSetup() {
-        this.pauseGame();
-        const modal = document.getElementById('session-modal');
-        this.loadSessionConfigToForm();
-        this.updateLiveReplayCode(); // Generate initial code
-        modal.showModal();
+    console.log('[Game] openSessionSetup called');
+    this.pauseGame();
+    if (window.sceneManager && window.SessionScene) {
+        console.log('[Game] Attempting scene switch to session. Registered scenes:', Array.from(window.sceneManager.scenes.keys()));
+        try { window.sceneManager.switch('session'); } catch (e) { console.warn('[Game] scene switch to session failed', e); }
+    } else {
+        console.warn('[Game] SessionScene missing or sceneManager unavailable; NOT falling back (to expose root cause).');
+    }
     }
 
     loadSessionConfigToForm() {
@@ -2408,158 +1860,27 @@ class DirectionalSkillsGame {
     }
 
     generateReplayCodeFromConfig(config) {
-        // Create a more comprehensive replay code that encodes the configuration
-        console.log('🔍 generateReplayCodeFromConfig called with:', config);
-        console.log('🔍 config.targetSize specifically:', config.targetSize);
-        
-        const configData = {
-            // Target configuration (ensure single digits 0-9)
-            st: Math.min(config.targetCounts.stationary, 9),    // Static targets
-            mv: Math.min(config.targetCounts.moving, 9),        // Moving targets
-            fl: Math.min(config.targetCounts.flee, 9),          // Flee targets  
-            bn: Math.min(config.targetCounts.bonus, 9),         // Bonus targets
-            hz: Math.min(config.targetCounts.hazard, 9),        // Hazard targets
-            
-            // Target and player settings (convert to numbers)
-            sz: this.encodeSize(config.targetSize),             // Size: 0-3
-            sp: config.playerSpeed,                             // Speed: 1-5
-            tr: this.encodeTrail(config.playerTrail),           // Trail: 0-1
-            
-            // Input and environment (convert to numbers)
-            im: this.encodeInputMethod(config.inputMethod),     // Input: 0-2
-            ib: Math.min(Math.floor(config.inputBuffer / 50), 9), // Buffer: 0-9
-            bd: this.encodeBoundaries(config.boundaries),       // Boundaries: 0-2
-            
-            // Feedback (binary flags)
-            fa: config.feedback.audio ? 1 : 0,
-            fv: config.feedback.visual ? 1 : 0,
-            fh: config.feedback.haptic ? 1 : 0
-        };
-        
-        console.log('🔍 Encoded configData:', configData);
-        
-        // Create a numeric string (all digits)
-        const configString = `${configData.st}${configData.mv}${configData.fl}${configData.bn}${configData.hz}` +
-                           `${configData.sz}${configData.sp}${configData.tr}${configData.im}` +
-                           `${configData.ib}${configData.bd}${configData.fa}${configData.fv}${configData.fh}`;
-        
-        console.log('🔢 Encoding config:', config, '→', configString);
-        
-        // Generate a hash for the visual part of the code
-        const hash = this.hashCodeToSeed(configString);
-        this.seedValue = hash;
-        
-        const colors = ['RED', 'BLUE', 'GREEN', 'YELLOW', 'PURPLE', 'ORANGE', 'PINK', 'CYAN'];
-        const shapes = ['CIRCLE', 'STAR', 'SQUARE', 'DIAMOND', 'HEART', 'TRIANGLE', 'ARROW', 'CROSS'];
-        
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        const shape = shapes[Math.floor(Math.random() * shapes.length)];
-        
-        // Return just the configString for shorter codes
-        // Keep color-shape generation for backward compatibility logging
-        console.log('🎨 Generated visual elements:', `${color}-${shape}`, 'but using numbers-only format');
-        return configString;
+    const mod = window.DSG && window.DSG.replay;
+    const code = mod ? mod.generateFromConfig(config) : (window.ReplayCode ? window.ReplayCode.generateFromConfig(config) : null);
+    if(!code) return '00000000000000';
+    this._log('🔢 Encoding config via replay helpers:', config, '→', code);
+    return code;
     }
 
     // Encoding helper methods
-    encodeSize(size) {
-        const sizeMap = { 'small': 0, 'medium': 1, 'large': 2, 'extra-large': 3 };
-        const result = sizeMap.hasOwnProperty(size) ? sizeMap[size] : 1;
-        console.log('🔍 encodeSize called with:', size, '→', result);
-        return result;
-    }
-
-    encodeTrail(trail) {
-        const trailMap = { 'short': 0, 'long': 1 };
-        return trailMap.hasOwnProperty(trail) ? trailMap[trail] : 0;
-    }
-
-    encodeInputMethod(method) {
-        const inputMap = { 'discrete': 0, 'continuous': 1, 'mouse': 2 };
-        return inputMap.hasOwnProperty(method) ? inputMap[method] : 0;
-    }
-
-    encodeBoundaries(boundaries) {
-        const boundariesMap = { 'none': 0, 'visual': 1, 'hard': 2 };
-        return boundariesMap.hasOwnProperty(boundaries) ? boundariesMap[boundaries] : 0;
-    }
+    // Encoding helpers now live in core/replay-code.js
 
     decodeReplayCode(replayCode) {
-        // Extract the configuration from a replay code
-        // Support both old format (COLOR-SHAPE-NUMBERS) and new format (NUMBERS only)
-        let configString;
-        
-        if (replayCode.includes('-')) {
-            // Old format: COLOR-SHAPE-NUMBERS
-            const parts = replayCode.split('-');
-            if (parts.length !== 3) {
-                console.warn('Invalid replay code format:', replayCode);
-                return null;
-            }
-            configString = parts[2];
-            console.log('🔄 Using legacy format code:', replayCode);
-        } else {
-            // New format: NUMBERS only
-            configString = replayCode;
-            console.log('🔢 Using numbers-only format code:', replayCode);
-        }
-        
         try {
-            // Validate that the configString is exactly 14 digits
-            if (!/^\d{14}$/.test(configString)) {
-                console.warn('Invalid configuration string format:', configString);
-                return null;
-            }
-            
-            // Parse the configuration using the direct numeric encoding
-            const config = {
-                targetCounts: {
-                    stationary: parseInt(configString.charAt(0)) || 0,
-                    moving: parseInt(configString.charAt(1)) || 0,
-                    flee: parseInt(configString.charAt(2)) || 0,
-                    bonus: parseInt(configString.charAt(3)) || 0,
-                    hazard: parseInt(configString.charAt(4)) || 0
-                },
-                targetSize: this.decodeSize(parseInt(configString.charAt(5))),
-                playerSpeed: parseInt(configString.charAt(6)) || 3,
-                playerTrail: this.decodeTrail(parseInt(configString.charAt(7))),
-                inputMethod: this.decodeInputMethod(parseInt(configString.charAt(8))),
-                inputBuffer: parseInt(configString.charAt(9)) * 50 || 300,
-                boundaries: this.decodeBoundaries(parseInt(configString.charAt(10))),
-                feedback: {
-                    audio: configString.charAt(11) === '1',
-                    visual: configString.charAt(12) === '1',
-                    haptic: configString.charAt(13) === '1'
-                }
-            };
-            
-            console.log('🔍 Decoded config:', config, 'from string:', configString);
-            return config;
-        } catch (error) {
-            console.error('Error decoding replay code:', error);
-            return null;
-        }
+            const mod = window.DSG && window.DSG.replay;
+            const decoded = mod ? mod.decode(replayCode) : (window.ReplayCode ? window.ReplayCode.decode(replayCode) : null);
+            if(!decoded) return null;
+            this._log('🔍 Decoded via replay helpers:', decoded, 'from:', replayCode);
+            return decoded;
+        } catch(e){ console.error('Error decoding replay code:', e); return null; }
     }
 
-    decodeSize(num) {
-        const sizeMap = { 0: 'small', 1: 'medium', 2: 'large', 3: 'extra-large' };
-        return sizeMap[num] || 'medium';
-    }
-
-    decodeTrail(num) {
-        const trailMap = { 0: 'short', 1: 'long' };
-        return trailMap[num] || 'short';
-    }
-
-    decodeInputMethod(num) {
-        const inputMap = { 0: 'discrete', 1: 'continuous', 2: 'mouse' };
-        return inputMap[num] || 'discrete';
-    }
-
-    decodeBoundaries(num) {
-        const boundariesMap = { 0: 'none', 1: 'visual', 2: 'hard' };
-        return boundariesMap[num] || 'visual';
-    }
+    // Decoding helpers now live in core/replay-code.js
 
     // Testing method to verify code accuracy
     testReplayCodeAccuracy() {
@@ -2611,25 +1932,7 @@ class DirectionalSkillsGame {
     }
 
     compareConfigs(config1, config2) {
-        if (!config2) return false;
-        
-        // Deep comparison of configurations
-        const compare = (obj1, obj2, path = '') => {
-            for (const key in obj1) {
-                const currentPath = path ? `${path}.${key}` : key;
-                if (typeof obj1[key] === 'object' && obj1[key] !== null) {
-                    if (!compare(obj1[key], obj2[key], currentPath)) {
-                        return false;
-                    }
-                } else if (obj1[key] !== obj2[key]) {
-                    console.log(`❌ Mismatch at ${currentPath}: ${obj1[key]} !== ${obj2[key]}`);
-                    return false;
-                }
-            }
-            return true;
-        };
-        
-        return compare(config1, config2);
+    const mod = window.DSG && window.DSG.replay; return mod ? mod.compareConfigs(config1, config2) : false;
     }
 
     startNewSession() {
@@ -2641,6 +1944,8 @@ class DirectionalSkillsGame {
         
         // Show game interface
         this.showGameInterface();
+    // Switch scene to main (gameplay) explicitly if scene system active
+    try { if (window.sceneManager) window.sceneManager.switch('main'); } catch (e) {}
         
         // Initialize new session WITHOUT passing seed - let it use the form configuration
         // The seed from the form is the live-generated code, not a code to decode
@@ -2669,6 +1974,8 @@ class DirectionalSkillsGame {
         
         // Show game interface (this will generate targets with the correct config)
         this.showGameInterface();
+    // Ensure scene switched to main for gameplay
+    try { if (window.sceneManager) window.sceneManager.switch('main'); } catch (e) {}
         
         // Start session
         this.startSession();
@@ -2717,49 +2024,7 @@ class DirectionalSkillsGame {
     }
 
     showSessionResults() {
-        const modal = document.getElementById('results-modal');
-        
-        // Update main time display
-        document.getElementById('results-time').textContent = this.formatTime(this.currentSession.totalTime);
-        
-        // Check for personal best
-        const isPersonalBest = this.checkPersonalBest();
-        const achievementBanner = document.getElementById('achievement-banner');
-        const achievementText = document.getElementById('achievement-text');
-        
-        if (isPersonalBest.isRecord) {
-            achievementBanner.style.display = 'flex';
-            achievementText.textContent = isPersonalBest.message;
-        } else {
-            achievementBanner.style.display = 'none';
-        }
-        
-        // Show optional stats only if non-zero
-        const bonusStat = document.getElementById('bonus-stat');
-        const hazardStat = document.getElementById('hazard-stat');
-        
-        if (this.currentSession.bonusTargetsCollected > 0) {
-            document.getElementById('results-bonus-targets').textContent = this.currentSession.bonusTargetsCollected;
-            bonusStat.style.display = 'flex';
-        } else {
-            bonusStat.style.display = 'none';
-        }
-        
-        if (this.currentSession.hazardTargetsHit > 0) {
-            document.getElementById('results-hazard-targets').textContent = this.currentSession.hazardTargetsHit;
-            hazardStat.style.display = 'flex';
-        } else {
-            hazardStat.style.display = 'none';
-        }
-        
-        // Update replay code
-        document.getElementById('results-seed').textContent = this.currentSession.seed;
-        
-        // Setup copy button
-        const copyButton = document.getElementById('copy-replay-code');
-        copyButton.onclick = () => this.copyCurrentSessionReplayCode();
-        
-        modal.showModal();
+        if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.showSessionResults(this); }
     }
     
     checkPersonalBest() {
@@ -2809,7 +2074,9 @@ class DirectionalSkillsGame {
         // Try to use the modern clipboard API
         if (navigator.clipboard && window.isSecureContext) {
             navigator.clipboard.writeText(replayCode).then(() => {
-                this.showCopyConfirmation();
+                if (typeof this.showCopyConfirmation === 'function') this.showCopyConfirmation();
+                if (typeof this.announceToScreenReader === 'function') this.announceToScreenReader(`Replay code ${replayCode} copied to clipboard`);
+                if (typeof this.showToast === 'function') this.showToast(`Replay code copied: ${replayCode}`);
             }).catch(() => {
                 this.fallbackCopyToClipboard(replayCode);
             });
@@ -2818,26 +2085,29 @@ class DirectionalSkillsGame {
         }
     }
     
-    fallbackCopyToClipboard(text) {
-        // Fallback for older browsers
+    // Duplicate fallback removed; shares unified helper
+    fallbackCopyToClipboard(text) { this._fallbackCopyToClipboardUnified(text); }
+
+    // Centralized clipboard fallback (used by both copy methods)
+    _fallbackCopyToClipboardUnified(text) {
         const textArea = document.createElement('textarea');
         textArea.value = text;
+        textArea.setAttribute('readonly', '');
         textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
+        textArea.style.left = '-9999px';
         document.body.appendChild(textArea);
-        textArea.focus();
         textArea.select();
-        
-        try {
-            document.execCommand('copy');
-            this.showCopyConfirmation();
-        } catch (err) {
-            console.error('Failed to copy replay code:', err);
-            alert(`Copy failed. Replay code: ${text}`);
-        }
-        
+        let success = false;
+        try { success = document.execCommand('copy'); } catch (e) {}
         document.body.removeChild(textArea);
+        if (success) {
+            if (typeof this.showCopyConfirmation === 'function') this.showCopyConfirmation();
+            if (typeof this.announceToScreenReader === 'function') this.announceToScreenReader(`Replay code ${text} copied to clipboard`);
+            if (typeof this.showToast === 'function') this.showToast(`Replay code copied: ${text}`);
+        } else {
+            console.warn('Clipboard fallback failed');
+            if (typeof this.announceToScreenReader === 'function') this.announceToScreenReader('Failed to copy replay code');
+        }
     }
     
     showCopyConfirmation() {
@@ -2938,8 +2208,8 @@ class DirectionalSkillsGame {
         }
         
         // Show main menu and hide game interface
-        document.getElementById('main-menu').style.display = 'flex';
-        document.getElementById('game-interface').style.display = 'none';
+    document.getElementById('main-menu').style.display = 'flex';
+    document.getElementById('game-interface').style.display = 'none';
         
         // Reset game state
         this.gameState = 'menu';
@@ -2967,19 +2237,23 @@ class DirectionalSkillsGame {
     }
     
     showPauseModal() {
-        const modal = document.getElementById('pause-modal');
-        modal.showModal();
-        
-        // Focus the resume button by default
-        setTimeout(() => {
-            const resumeBtn = document.getElementById('resume-session-btn');
-            if (resumeBtn) resumeBtn.focus();
-        }, 100);
-        
-        // Add backdrop click handler
-        modal.addEventListener('click', this.handleBackdropClick.bind(this));
-        
-        this.announceToScreenReader('Session paused. Choose to resume or quit.');
+        if (window.sceneManager && window.PauseScene) {
+            window.sceneManager.switch('pause');
+        } else {
+            const modal = document.getElementById('pause-modal');
+            modal.showModal();
+            
+            // Focus the resume button by default
+            setTimeout(() => {
+                const resumeBtn = document.getElementById('resume-session-btn');
+                if (resumeBtn) resumeBtn.focus();
+            }, 100);
+            
+            // Add backdrop click handler
+            modal.addEventListener('click', this.handleBackdropClick.bind(this));
+            
+            this.announceToScreenReader('Session paused. Choose to resume or quit.');
+        }
     }
     
     handleBackdropClick(event) {
@@ -2990,8 +2264,13 @@ class DirectionalSkillsGame {
     }
     
     hidePauseModal() {
-        const modal = document.getElementById('pause-modal');
-        modal.close();
+        if (window.sceneManager && window.PauseScene) {
+            // PauseScene will close itself on exit when switching back to main
+            if (window.sceneManager) window.sceneManager.switch('main');
+        } else {
+            const modal = document.getElementById('pause-modal');
+            modal.close();
+        }
     }
     
     updatePlayPauseButton() {
@@ -3039,34 +2318,7 @@ class DirectionalSkillsGame {
     }
     
     handleResize() {
-        setTimeout(() => {
-            const oldWidth = this.canvas.width;
-            const oldHeight = this.canvas.height;
-            
-            this.setupCanvas();
-            
-            // Handle resize based on user setting
-            switch(this.settings.resizeHandling) {
-                case 'reposition':
-                    this.repositionTargetsAfterResize(oldWidth, oldHeight);
-                    break;
-                case 'scale':
-                    this.scaleTargetsAfterResize(oldWidth, oldHeight);
-                    break;
-                case 'regenerate':
-                    this.regenerateTargetsAfterResize();
-                    break;
-                case 'pause':
-                    if (this.gameState === 'playing') {
-                        this.pauseGame();
-                        this.announceToScreenReader('Game paused due to window resize. Press Space to resume.');
-                    }
-                    break;
-            }
-            
-            // Always reposition player if they're now off-screen
-            this.repositionPlayerAfterResize();
-        }, 100);
+        if(window.DSG && window.DSG.resize){ window.DSG.resize.handleResize(this); }
     }
     
     repositionTargetsAfterResize(oldWidth, oldHeight) {
@@ -3180,10 +2432,7 @@ class DirectionalSkillsGame {
         }
     }
     
-    announceToScreenReader(message) {
-        const statusElement = document.getElementById('game-status');
-        statusElement.textContent = message;
-    }
+    announceToScreenReader(message){ if(window.DSG && window.DSG.announcer){ window.DSG.announcer.announce(message); } }
     
     loadSettings() {
         const saved = localStorage.getItem('directionalSkillsSettings');
@@ -3194,7 +2443,9 @@ class DirectionalSkillsGame {
     }
 }
 
-// Initialize game when page loads
-document.addEventListener('DOMContentLoaded', () => {
-    window.game = new DirectionalSkillsGame();
-});
+// Game instance now created in index.html before scene bootstrap to avoid race conditions.
+// Expose class on window so bootstrap (which checks window.DirectionalSkillsGame) can instantiate it.
+// Note: class declarations (unlike var/function) do NOT auto-attach to window in browsers.
+if (typeof window !== 'undefined' && !window.DirectionalSkillsGame) {
+    window.DirectionalSkillsGame = DirectionalSkillsGame;
+}
