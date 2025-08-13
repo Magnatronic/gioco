@@ -11,6 +11,10 @@ class AccessibilityManager {
         this.highContrastMode = false;
         this.reducedMotionMode = false;
         this.screenReaderActive = false;
+    // Queued announcement throttling
+    this._announceQueue = [];
+    this._announceTimer = null;
+    this._announceInterval = 300; // ms debounce for burst events
         
         this.initialize();
         console.log('AccessibilityManager initialized');
@@ -191,16 +195,62 @@ class AccessibilityManager {
      */
     announce(text, priority = 'polite') {
         if (!text) return;
-        
+        // Immediate announce bypasses queue for assertive
+        if (priority === 'assertive') {
+            this._flushQueue();
+            this._emitAnnouncement(text, priority);
+            return;
+        }
+        // Coalesce identical consecutive announcements
+        if (this._announceQueue.length > 0) {
+            const last = this._announceQueue[this._announceQueue.length - 1];
+            if (last.text === text) return; // suppress duplicate
+        }
+        this._announceQueue.push({ text, priority });
+        this._scheduleAnnounceFlush();
+    }
+
+    /**
+     * Internal: schedule queued polite announcements
+     */
+    _scheduleAnnounceFlush() {
+        if (this._announceTimer) return;
+        this._announceTimer = setTimeout(() => {
+            this._flushQueue();
+        }, this._announceInterval);
+    }
+
+    /**
+     * Internal: flush queue combining short messages if needed
+     */
+    _flushQueue() {
+        if (this._announceTimer) {
+            clearTimeout(this._announceTimer);
+            this._announceTimer = null;
+        }
+        if (!this._announceQueue.length) return;
+        // Combine up to 3 short (<40 chars) messages into one to reduce chatter
+        const batch = [];
+        while (this._announceQueue.length && batch.length < 3) {
+            batch.push(this._announceQueue.shift().text);
+        }
+        const combined = batch.join('. ');
+        this._emitAnnouncement(combined, 'polite');
+        // If more remain, schedule another flush
+        if (this._announceQueue.length) this._scheduleAnnounceFlush();
+    }
+
+    /**
+     * Internal: emit announcement to live region
+     */
+    _emitAnnouncement(text, priority) {
         const element = priority === 'assertive' ? this.alertElement : this.announceElement;
-        
-        // Clear and set new text
+        if (!element) return;
+        // Force DOM mutation for AT by clearing then setting next frame
         element.textContent = '';
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             element.textContent = text;
-        }, 100);
-        
-        // Also log for debugging
+        });
         console.log(`[A11Y ${priority}]:`, text);
     }
     

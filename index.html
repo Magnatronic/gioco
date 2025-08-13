@@ -540,9 +540,28 @@
     <script src="core/scene-manager.js"></script>
     <script src="core/engine.js"></script>
     <script src="core/replay-code.js"></script>
+    <!-- Modular helpers (must load before game.js which delegates to them) -->
+    <script src="core/modules/replay-helpers.js"></script>
+    <script src="a11y/announcer.js"></script>
+    <script src="core/modules/target-generation.js"></script>
+    <script src="core/modules/session-timing.js"></script>
+    <script src="core/modules/input-handling.js"></script>
+    <script src="core/modules/collision-effects.js"></script>
+    <script src="core/modules/ui-session.js"></script>
+    <script src="core/modules/resize-handling.js"></script>
+    <!-- Load main game class early so window.DirectionalSkillsGame exists before scenes -->
+    <script src="game.js"></script>
     <script src="core/game-scene.js"></script>
     <script src="core/menu-scene.js"></script>
     <script src="core/results-scene.js"></script>
+    <!-- Modal / auxiliary scene scripts (previously missing) -->
+    <script src="core/base-modal-scene.js"></script>
+    <script src="core/help-scene.js"></script>
+    <script src="core/stats-scene.js"></script>
+    <script src="core/settings-scene.js"></script>
+    <script src="core/session-scene.js"></script>
+    <script src="core/replay-scene.js"></script>
+    <script src="core/pause-scene.js"></script>
     <script src="mini-games/registry.js"></script>
     <script src="mini-games/directional-practice.js"></script>
     <script src="input-manager.js"></script>
@@ -550,11 +569,16 @@
     <!-- Switch scanning overlay (shown when Switch input is enabled) -->
     <div id="switch-overlay" role="region" aria-label="Switch scanning overlay" style="display:none"></div>
 
-    <!-- Game Script -->
-            <script src="game.js"></script>
+    <!-- Game bootstrap (initialization + scene wiring) -->
             <script>
                 // Bootstrap the SceneManager + Engine and mount the main game scene once DOM is ready
                 window.addEventListener('DOMContentLoaded', function () {
+                    // Fallback init (should already be initialized by immediate block below if DOM was ready)
+                    if (!window.game && window.DirectionalSkillsGame) {
+                        try { window.game = new window.DirectionalSkillsGame(); console.log('[Bootstrap] Game instance created on DOMContentLoaded'); } catch (e) { console.error('[Bootstrap] Game init failed on DOMContentLoaded', e); }
+                    } else {
+                        console.log('[Bootstrap] DOMContentLoaded: window.game exists?', !!window.game);
+                    }
                     if (!window.SceneManager || !window.Engine || !window.GameScene) return;
                     try {
                         // Optional kill-switch: add ?engine=off to the URL to skip external engine
@@ -571,20 +595,26 @@
                         window.engine = window.engine || new window.Engine(ctx);
                                     // Register scenes and switch to main scene wrapping existing game instance
                         if (!window._mainSceneRegistered) {
-                            window.sceneManager.register('main', new window.GameScene());
-                                        window.sceneManager.register('menu', new window.MenuScene());
-                                        window.sceneManager.register('results', new window.ResultsScene());
+                            // Core scenes
+                            if (window.GameScene) window.sceneManager.register('main', new window.GameScene());
+                            if (window.MenuScene) window.sceneManager.register('menu', new window.MenuScene());
+                            if (window.ResultsScene) window.sceneManager.register('results', new window.ResultsScene());
+                            // Modal / auxiliary scenes (ensure they exist before registering)
+                            if (window.HelpScene) window.sceneManager.register('help', new window.HelpScene());
+                            if (window.StatsScene) window.sceneManager.register('stats', new window.StatsScene());
+                            if (window.SettingsScene) window.sceneManager.register('settings', new window.SettingsScene());
+                            if (window.SessionScene) window.sceneManager.register('session', new window.SessionScene());
+                            if (window.ReplayScene) window.sceneManager.register('replay', new window.ReplayScene());
+                            if (window.PauseScene) window.sceneManager.register('pause', new window.PauseScene());
+                            console.log('[Bootstrap] Scenes registered:', Array.from(window.sceneManager.scenes.keys()));
                             window._mainSceneRegistered = true;
                         }
                                     // Default to menu, then switch to main when a session starts
                                     window.sceneManager.switch('menu');
                                     // Non-breaking: keep DOM buttons working; when a session starts, switch to main
-                                    const startSessionBtn = document.getElementById('start-session');
-                                    if (startSessionBtn) {
-                                        startSessionBtn.addEventListener('click', function () {
-                                            setTimeout(function () { window.sceneManager.switch('main'); }, 0);
-                                        });
-                                    }
+                                    // Removed generic #start-session -> main scene auto-switch.
+                                    // SessionScene / game.startNewSession() now explicitly performs scene switch
+                                    // to avoid premature menu flash and double scene transitions.
                         if (!window.engine.running) {
                             window.engine.start(window.sceneManager);
                         }
@@ -599,6 +629,14 @@
                         console.warn('Engine bootstrap failed:', e);
                     }
                 });
+                // Immediate (synchronous) init in case users click before DOMContentLoaded or event timing issues
+                (function immediateGameInit(){
+                    if (!window.game && window.DirectionalSkillsGame && document.readyState !== 'loading') {
+                        try { window.game = new window.DirectionalSkillsGame(); console.log('[Bootstrap] Game instance created immediately (readyState=' + document.readyState + ')'); } catch (e) { console.error('[Bootstrap] Immediate game init failed', e); }
+                    } else {
+                        console.log('[Bootstrap] Immediate init skipped. readyState=' + document.readyState + ' hasGame=' + !!window.game + ' hasClass=' + !!window.DirectionalSkillsGame);
+                    }
+                })();
             </script>
 </body>
 </html>< ! - -   T r i g g e r   P a g e s   d e p l o y m e n t   - - > 

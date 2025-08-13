@@ -332,6 +332,12 @@ html, body {
     font-size: 1.1rem;
 }
 
+/* Negative time (net time below zero) styling */
+#current-session-time.time-negative {
+    color: var(--success-color);
+    text-shadow: 0 0 4px rgba(39, 174, 96, 0.4);
+}
+
 .metric-separator {
     color: var(--text-light);
     margin: 0 2px;

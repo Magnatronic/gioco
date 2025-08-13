@@ -13,7 +13,8 @@
   }
 
   SceneManager.prototype.register = function (id, scene) {
-    this.scenes.set(id, scene);
+  this.scenes.set(id, scene);
+  console.log('[SceneManager] Registered scene:', id);
   };
 
   SceneManager.prototype.unregister = function (id) {
@@ -21,6 +22,7 @@
   };
 
   SceneManager.prototype.switch = function (id, params) {
+  console.log('[SceneManager] Switching to scene:', id, 'with params:', params);
     if (this.current && typeof this.current.onExit === 'function') {
       try { this.current.onExit(); } catch (e) { console.warn('Scene onExit error', e); }
     }
