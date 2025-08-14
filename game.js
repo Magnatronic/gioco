@@ -808,7 +808,13 @@ class DirectionalSkillsGame {
             this.updateClickToMove();
         }
         
-    // Target motion & collision effects handled by collision / targets modules now
+        // Target motion (moving + flee)
+        if(window.DSG && window.DSG.targetMotion){
+            window.DSG.targetMotion.updateTargetMotion(this, (this.gameState==='playing') ? 1/60 : 0); // approximate dt; legacy loop lacked dt
+        }
+
+        // Collision checks (legacy discrete step) remain delegated
+        if(this.gameState === 'playing') this.checkCollisions();
     }
 
     updateClickToMove() {
