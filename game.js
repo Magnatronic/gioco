@@ -334,14 +334,22 @@ class DirectionalSkillsGame {
     }
     
     startSession() {
-        if(window.DSG && window.DSG.sessionTiming){ window.DSG.sessionTiming.startSession(this); return; }
+    /**
+     * Prepare a new session: puts game in 'ready' state and focuses canvas.
+     * Actual implementation lives in DSG.sessionTiming.startSession.
+     */
+    if(window.DSG && window.DSG.sessionTiming){ window.DSG.sessionTiming.startSession(this); return; }
         // Fallback if module missing
         this.gameState='ready'; this.canvas.focus(); this.updatePlayPauseButton();
     }
     
     // New method to actually begin the timed session
     beginTimedSession() {
-        if(window.DSG && window.DSG.sessionTiming){ window.DSG.sessionTiming.beginTimedSession(this); return; }
+    /**
+     * Start timing on first movement input from ready state.
+     * Delegated to DSG.sessionTiming.beginTimedSession.
+     */
+    if(window.DSG && window.DSG.sessionTiming){ window.DSG.sessionTiming.beginTimedSession(this); return; }
         if(this.gameState!=='ready') return; this.currentSession.startTime=Date.now(); this.gameState='playing'; this.updatePlayPauseButton();
     }
     
@@ -369,22 +377,33 @@ class DirectionalSkillsGame {
     }
     
     calculateSessionTime() {
-        if(window.DSG && window.DSG.sessionTiming) return window.DSG.sessionTiming.calculateSessionTime(this);
+    /**
+     * Compute elapsed session time including adjustments (bonus/hazard).
+     */
+    if(window.DSG && window.DSG.sessionTiming) return window.DSG.sessionTiming.calculateSessionTime(this);
         if(!this.currentSession.startTime) return 0; const endTime=this.currentSession.endTime||Date.now(); const total=endTime-this.currentSession.startTime; return total - this.currentSession.pausedTime + (this.currentSession.timeAdjustments*1000);
     }
     
     formatTime(milliseconds) {
-        if(window.DSG && window.DSG.sessionTiming) return window.DSG.sessionTiming.formatTime(milliseconds);
+    /**
+     * Format milliseconds into human-readable mm:ss.ms string.
+     */
+    if(window.DSG && window.DSG.sessionTiming) return window.DSG.sessionTiming.formatTime(milliseconds);
         const neg=milliseconds<0; const abs=Math.abs(milliseconds); const s=Math.floor(abs/1000); const m=Math.floor(s/60); const rs=s%60; const cs=Math.floor((abs%1000)/10); const base=m>0?`${m}:${rs.toString().padStart(2,'0')}.${cs.toString().padStart(2,'0')}`:`${rs}.${cs.toString().padStart(2,'0')}s`; return neg?`-${base}`:base;
     }
     
     // Seeded Random Number Generator for reproducible sessions
         seededRandom() { return (window.DSG && window.DSG.targets) ? window.DSG.targets.seededRandom(this) : Math.random(); }
-        generateSessionTargets() { if(window.DSG && window.DSG.targets) { window.DSG.targets.generateSessionTargets(this); } }
-        createDeterministicTarget(type, size) { if(window.DSG && window.DSG.targets) { return window.DSG.targets.createDeterministicTarget(this, type, size); } }
-        setSeededPlayerPosition() { if(window.DSG && window.DSG.targets) { window.DSG.targets.setSeededPlayerPosition(this); } }
-        seedRandom(seed) { if(window.DSG && window.DSG.targets) { window.DSG.targets.seedRandom(this, seed); } else { this.seedValue = seed; } }
-        hashCodeToSeed(code) { if(window.DSG && window.DSG.targets) { return window.DSG.targets.hashCodeToSeed(code); } return 0; }
+    /** Generate all targets deterministically for current session seed */
+    generateSessionTargets() { if(window.DSG && window.DSG.targets) { window.DSG.targets.generateSessionTargets(this); } }
+    /** Create a single deterministic target (internal helper used by generation) */
+    createDeterministicTarget(type, size) { if(window.DSG && window.DSG.targets) { return window.DSG.targets.createDeterministicTarget(this, type, size); } }
+    /** Position player based on current session seed */
+    setSeededPlayerPosition() { if(window.DSG && window.DSG.targets) { window.DSG.targets.setSeededPlayerPosition(this); } }
+    /** Initialize linear congruential RNG with provided numeric seed */
+    seedRandom(seed) { if(window.DSG && window.DSG.targets) { window.DSG.targets.seedRandom(this, seed); } else { this.seedValue = seed; } }
+    /** Convert replay code text into numeric seed (hash). */
+    hashCodeToSeed(code) { if(window.DSG && window.DSG.targets) { return window.DSG.targets.hashCodeToSeed(code); } return 0; }
     
     setupCanvas() {
         // Set canvas size to fill the container
@@ -501,7 +520,8 @@ class DirectionalSkillsGame {
     
     setupEventListeners() {
         // Keyboard events via input module
-        if(window.DSG && window.DSG.input) { window.DSG.input.wireDocumentKeyboard(this); } else {
+    // Wire keyboard events (delegated); fallback attaches minimal listeners if module missing
+    if(window.DSG && window.DSG.input) { window.DSG.input.wireDocumentKeyboard(this); } else {
             document.addEventListener('keydown', (e) => this.handleKeyDown(e));
             document.addEventListener('keyup', (e) => this.handleKeyUp(e));
         }
@@ -662,15 +682,18 @@ class DirectionalSkillsGame {
     }
     
     handleKeyDown(e) {
-        if(window.DSG && window.DSG.input){ window.DSG.input.handleKeyDown(this,e); return; }
+    // Delegate keydown handling (movement / state transitions)
+    if(window.DSG && window.DSG.input){ window.DSG.input.handleKeyDown(this,e); return; }
     }
     
     handleKeyUp(e) {
-        if(window.DSG && window.DSG.input){ window.DSG.input.handleKeyUp(this,e); return; }
+    // Delegate keyup handling
+    if(window.DSG && window.DSG.input){ window.DSG.input.handleKeyUp(this,e); return; }
     }
     
     handleMovementInput(keyCode) {
-        if(window.DSG && window.DSG.input){ window.DSG.input.handleMovementInput(this,keyCode); }
+    // Delegate buffered discrete movement
+    if(window.DSG && window.DSG.input){ window.DSG.input.handleMovementInput(this,keyCode); }
     }
     
     setContinuousDirection(direction) {
@@ -733,167 +756,25 @@ class DirectionalSkillsGame {
 
     // Mouse Input Handlers
     handleMouseClick(e) {
-        if(window.DSG && window.DSG.input){ window.DSG.input.handleMouseClick(this,e); }
+    // Delegate click-to-move handling
+    if(window.DSG && window.DSG.input){ window.DSG.input.handleMouseClick(this,e); }
     }
     
     checkCollisions() {
-        if(window.DSG && window.DSG.collision){ window.DSG.collision.checkCollisions(this); }
+    // Delegate collision detection & resolution
+    if(window.DSG && window.DSG.collision){ window.DSG.collision.checkCollisions(this); }
     }
     
     collectTarget(index) {
-        if(window.DSG && window.DSG.collision){ window.DSG.collision.collectTarget(this,index); }
+    // Delegate collection effects & scoring
+    if(window.DSG && window.DSG.collision){ window.DSG.collision.collectTarget(this,index); }
     }
 
     handleHazardCollision(target, index) {
-        if(window.DSG && window.DSG.collision){ window.DSG.collision.handleHazardCollision(this,target,index); }
+    // Delegate hazard collision (time penalty + visual)
+    if(window.DSG && window.DSG.collision){ window.DSG.collision.handleHazardCollision(this,target,index); }
     }
-    // Target behavior & creation logic moved to DSG.targets/collision modules (pruned legacy helpers)
-    
-    getLevelConfig(level) {
-        const baseConfig = {
-            targetCount: 5,
-            targetSize: 25
-        };
-        
-        // Progressive difficulty following educational design
-        switch(level) {
-            case 1:
-                // Level 1: Foundation - Large targets, one at a time
-                return { ...baseConfig, targetCount: 5, targetSize: 40 }; // Extra large targets
-            case 2:
-                // Level 2: Building Confidence - Same size targets, but more of them
-                return { ...baseConfig, targetCount: 6, targetSize: 40 }; // Keep same size to build confidence
-            case 3:
-                // Level 3: Precision Practice - Slightly smaller targets
-                return { ...baseConfig, targetCount: 8, targetSize: 35 };
-            case 4:
-                // Level 4: Dynamic Elements - Standard size targets
-                return { ...baseConfig, targetCount: 10, targetSize: 30 };
-            default:
-                // Advanced levels - Progressive difficulty
-                return { 
-                    ...baseConfig, 
-                    targetCount: Math.min(5 + level - 1, 15), 
-                    targetSize: Math.max(20, 35 - (level - 2) * 3) 
-                };
-        }
-    }
-    
-    createTarget(config) {
-        const margin = config.targetSize + 20;
-        const x = margin + Math.random() * (this.canvas.width - 2 * margin);
-        const y = margin + Math.random() * (this.canvas.height - 2 * margin);
-        
-        return {
-            x,
-            y,
-            size: config.targetSize,
-            color: '#e74c3c',
-            points: 100
-        };
-    }
-    
-    createTargetWithSpacing(config) {
-        const margin = config.targetSize + 20;
-        const minDistance = config.targetSize * 3; // Minimum distance between targets
-        const maxAttempts = 50; // Maximum attempts to place a target
-        
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            const x = margin + Math.random() * (this.canvas.width - 2 * margin);
-            const y = margin + Math.random() * (this.canvas.height - 2 * margin);
-            
-            // Check distance from player
-            const playerDistance = Math.sqrt(
-                Math.pow(x - this.player.x, 2) + Math.pow(y - this.player.y, 2)
-            );
-            
-            // Ensure target is not too close to player
-            if (playerDistance < minDistance * 1.5) {
-                continue;
-            }
-            
-            // Check distance from existing targets
-            let tooClose = false;
-            for (const existingTarget of this.targets) {
-                const distance = Math.sqrt(
-                    Math.pow(x - existingTarget.x, 2) + Math.pow(y - existingTarget.y, 2)
-                );
-                
-                if (distance < minDistance) {
-                    tooClose = true;
-                    break;
-                }
-            }
-            
-            if (!tooClose) {
-                return {
-                    x,
-                    y,
-                    size: config.targetSize,
-                    color: '#e74c3c',
-                    points: 100
-                };
-            }
-        }
-        
-        // If we couldn't find a good spot, fall back to grid-based placement
-        return this.createTargetGridBased(config);
-    }
-    
-    createTargetGridBased(config) {
-        const margin = config.targetSize + 20;
-        const gridCols = Math.floor((this.canvas.width - 2 * margin) / (config.targetSize * 3));
-        const gridRows = Math.floor((this.canvas.height - 2 * margin) / (config.targetSize * 3));
-        
-        // Create a list of available grid positions
-        const availablePositions = [];
-        for (let row = 0; row < gridRows; row++) {
-            for (let col = 0; col < gridCols; col++) {
-                const x = margin + col * (config.targetSize * 3) + config.targetSize * 1.5;
-                const y = margin + row * (config.targetSize * 3) + config.targetSize * 1.5;
-                
-                // Check if position is far enough from player
-                const playerDistance = Math.sqrt(
-                    Math.pow(x - this.player.x, 2) + Math.pow(y - this.player.y, 2)
-                );
-                
-                if (playerDistance >= config.targetSize * 4) {
-                    // Check if position is far enough from existing targets
-                    let tooClose = false;
-                    for (const existingTarget of this.targets) {
-                        const distance = Math.sqrt(
-                            Math.pow(x - existingTarget.x, 2) + Math.pow(y - existingTarget.y, 2)
-                        );
-                        
-                        if (distance < config.targetSize * 2.5) {
-                            tooClose = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!tooClose) {
-                        availablePositions.push({ x, y });
-                    }
-                }
-            }
-        }
-        
-        if (availablePositions.length > 0) {
-            const randomIndex = Math.floor(Math.random() * availablePositions.length);
-            const position = availablePositions[randomIndex];
-            
-            return {
-                x: position.x,
-                y: position.y,
-                size: config.targetSize,
-                color: '#e74c3c',
-                points: 100
-            };
-        }
-        
-        // Last resort: create target with basic positioning
-        return this.createTarget(config);
-    }
+    // Legacy target generation helpers removed (replaced by DSG.targets module)
     
     gameLoop() {
         // Keep existing loop unless an external Engine is driving updates
@@ -927,10 +808,13 @@ class DirectionalSkillsGame {
             this.updateClickToMove();
         }
         
-        // Update targets (for moving targets in sessions) - only when playing
-        if (this.currentSession && this.gameState === 'playing') {
-            this.updatePracticeTargets();
+        // Target motion (moving + flee)
+        if(window.DSG && window.DSG.targetMotion){
+            window.DSG.targetMotion.updateTargetMotion(this, (this.gameState==='playing') ? 1/60 : 0); // approximate dt; legacy loop lacked dt
         }
+
+        // Collision checks (legacy discrete step) remain delegated
+        if(this.gameState === 'playing') this.checkCollisions();
     }
 
     updateClickToMove() {
@@ -1453,19 +1337,23 @@ class DirectionalSkillsGame {
     
     // UI Management
     updateTimerDisplay() {
-        if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateTimerDisplay(this); }
+    // Delegate timer DOM update
+    if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateTimerDisplay(this); }
     }
     
     updateUI() {
-        if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateUI(this); }
+    // Delegate dynamic UI updates
+    if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateUI(this); }
     }
     
     updateStatsModal() {
-        if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateStatsModal(this); }
+    // Delegate statistics modal content refresh
+    if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateStatsModal(this); }
     }
     
     updateSessionHistory() {
-        if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateSessionHistory(this); }
+    // Delegate session history list refresh
+    if(window.DSG && window.DSG.uiSession){ window.DSG.uiSession.updateSessionHistory(this); }
     }
     
     copyReplayCode(replayCode) {

@@ -1,4 +1,22 @@
-// UI update & session result utilities extracted from game.js
+/**
+ * UI updates & session result utilities.
+ *
+ * Responsibilities:
+ *  - Update live timer & progress bar (updateTimerDisplay / updateUI)
+ *  - Aggregate and render stats & recent session history (updateStatsModal / updateSessionHistory)
+ *  - Populate & reveal end-of-session results modal (showSessionResults)
+ *
+ * Accessibility:
+ *  - Leaves announcement responsibility to game.announceToScreenReader invoked elsewhere.
+ *  - Generates copy buttons with accessible labels via title attribute.
+ *
+ * Exports (window.DSG.uiSession):
+ *  updateUI(game)
+ *  updateTimerDisplay(game)
+ *  updateStatsModal(game)
+ *  updateSessionHistory(game)
+ *  showSessionResults(game)
+ */
 (function(){
   function updateTimerDisplay(game){
     const timeEl=document.getElementById('current-session-time');

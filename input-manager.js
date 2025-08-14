@@ -20,7 +20,7 @@ class UniversalInputManager {
         // Bind event handlers
         this.bindUniversalEvents();
         
-        console.log('UniversalInputManager initialized');
+    if(window.game && window.game._log){ window.game._log('UniversalInputManager initialized'); }
     }
     
     /**
@@ -159,7 +159,7 @@ class UniversalInputManager {
                 timestamp: Date.now()
             }));
             
-            console.log(`Input method switched from ${oldMethod} to ${method}`);
+            if(window.game && window.game._log){ window.game._log(`Input method switched from ${oldMethod} to ${method}`); }
         }
     }
     
@@ -713,11 +713,11 @@ class EyeGazeInput extends BaseInput {
     bindEvents() {
         // Placeholder for eye gaze integration
         // In a real implementation, this would interface with eye tracking hardware
-        console.log('Eye gaze input method activated (placeholder)');
+    if(window.game && window.game._log){ window.game._log('Eye gaze input method activated (placeholder)'); }
     }
     
     unbindEvents() {
-        console.log('Eye gaze input method deactivated');
+    if(window.game && window.game._log){ window.game._log('Eye gaze input method deactivated'); }
     }
 }
 

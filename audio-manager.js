@@ -13,7 +13,7 @@ class AudioManager {
         this.loadingPromises = new Map();
         
         this.initialize();
-        console.log('AudioManager initialized');
+    if(window.game && window.game._log){ window.game._log('AudioManager initialized'); }
     }
     
     /**
@@ -46,7 +46,7 @@ class AudioManager {
             // Load user preferences
             this.loadPreferences();
             
-            console.log('Audio system initialized successfully');
+            if(window.game && window.game._log){ window.game._log('Audio system initialized successfully'); }
 
         } catch (error) {
             console.warn('Audio initialization failed, continuing without audio:', error);
@@ -62,7 +62,7 @@ class AudioManager {
         if (this.audioContext && this.audioContext.state === 'suspended') {
             try {
                 await this.audioContext.resume();
-                console.log('Audio context resumed');
+                if(window.game && window.game._log){ window.game._log('Audio context resumed'); }
             } catch (error) {
                 console.error('Failed to resume audio context:', error);
             }
@@ -259,7 +259,7 @@ class AudioManager {
      */
     async playAudioFile(config) {
         // Placeholder for future audio file implementation
-        console.log(`Playing audio file: ${config.file}`);
+    if(window.game && window.game._log){ window.game._log(`Playing audio file: ${config.file}`); }
     }
     
     /**
@@ -528,7 +528,7 @@ class AudioManager {
             sounds: Object.keys(this.soundDefinitions).length
         };
         
-        console.log('Audio test results:', tests);
+    if(window.game && window.game._log){ window.game._log('Audio test results:', tests); }
         
         if (this.enabled) {
             this.playSound('menuSelect', { visualFeedback: true });

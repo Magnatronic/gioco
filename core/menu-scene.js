@@ -29,9 +29,9 @@
 
       // Proxy handlers to existing game methods (which handle pause + scene switch)
       this._handlers.onOpenSession = function () {
-        console.log('[MenuScene] Create Game button clicked');
+  if(window.game && window.game._log){ window.game._log('[MenuScene] Create Game button clicked'); }
         var g = window.game;
-        console.log('[MenuScene] typeof window.game:', typeof g, 'has openSessionSetup:', g ? typeof g.openSessionSetup : 'n/a');
+  if(window.game && window.game._log){ window.game._log('[MenuScene] typeof window.game:', typeof g, 'has openSessionSetup:', g ? typeof g.openSessionSetup : 'n/a'); }
         try {
           if (g && typeof g.openSessionSetup === 'function') {
             g.openSessionSetup();
@@ -43,7 +43,7 @@
         }
       };
       this._handlers.onOpenReplay = function () {
-        console.log('[MenuScene] Play Replay Code button clicked');
+  if(window.game && window.game._log){ window.game._log('[MenuScene] Play Replay Code button clicked'); }
         if (window.game && typeof window.game.openReplayEntry === 'function') {
           window.game.openReplayEntry();
         } else {
@@ -52,13 +52,13 @@
         }
       };
       this._handlers.onOpenStats = function () {
-        console.log('[MenuScene] Progress & History button clicked');
+  if(window.game && window.game._log){ window.game._log('[MenuScene] Progress & History button clicked'); }
         if (window.game && typeof window.game.openStats === 'function') {
           window.game.openStats();
         }
       };
       this._handlers.onOpenHelp = function () {
-        console.log('[MenuScene] Help & Support button clicked');
+  if(window.game && window.game._log){ window.game._log('[MenuScene] Help & Support button clicked'); }
         if (window.game && typeof window.game.openHelp === 'function') {
           window.game.openHelp();
         }

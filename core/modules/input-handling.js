@@ -1,4 +1,24 @@
-// Input handling abstraction extracted from game.js
+/**
+ * Input handling abstraction.
+ *
+ * Responsibilities:
+ *  - Normalize keyboard & mouse input into high level movement / control intents.
+ *  - Start session timing upon first movement while in 'ready' state.
+ *  - Manage pause / resume / help / fullscreen shortcuts.
+ *  - Provide thin wrapper to wire global document listeners (wireDocumentKeyboard).
+ *
+ * Design notes:
+ *  - All handlers receive the game instance (no hidden globals) for testability.
+ *  - Movement abstraction supports configurable inputMethod (continuous vs mouse).
+ *  - Defers actual timed session start to sessionTiming module (beginTimedSession).
+ *
+ * Exports (window.DSG.input):
+ *  handleKeyDown(game, event)
+ *  handleKeyUp(game, event)
+ *  handleMovementInput(game, keyCode)
+ *  handleMouseClick(game, mouseEvent)
+ *  wireDocumentKeyboard(game)
+ */
 (function(){
   function handleKeyDown(game,e){
     game.keys[e.code] = true;

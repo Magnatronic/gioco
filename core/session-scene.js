@@ -10,7 +10,7 @@
     SessionScene.prototype.constructor = SessionScene;
   }
   SessionScene.prototype.onEnter = function () {
-  console.log('[SessionScene] onEnter invoked');
+  if(window.game && window.game._log){ window.game._log('[SessionScene] onEnter invoked'); }
     var self = this;
     var modal = (typeof this.openModal === 'function') ? this.openModal('session-modal') : document.getElementById('session-modal');
     if (!modal) return;
@@ -31,10 +31,10 @@
       var sessionClose = modal.querySelector('.modal-close');
       var startSession = document.getElementById('start-session');
       var cancelSession = document.getElementById('cancel-session');
-      console.log('[SessionScene] Binding listeners', { hasClose: !!sessionClose, hasStart: !!startSession, hasCancel: !!cancelSession });
+  if(window.game && window.game._log){ window.game._log('[SessionScene] Binding listeners', { hasClose: !!sessionClose, hasStart: !!startSession, hasCancel: !!cancelSession }); }
   var handleClose = function () { if (typeof self.closeModal === 'function') self.closeModal(); };
       var handleStart = function () {
-        console.log('[SessionScene] Start button clicked');
+  if(window.game && window.game._log){ window.game._log('[SessionScene] Start button clicked'); }
         if (window.game && typeof window.game.startNewSession === 'function') {
           window.game.startNewSession();
         } else {

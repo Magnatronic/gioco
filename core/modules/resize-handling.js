@@ -1,4 +1,19 @@
-// Canvas resize handling extracted from game.js
+/**
+ * Canvas resize handling utilities.
+ *
+ * Responsibilities:
+ *  - Debounced reaction to window resize (handleResize)
+ *  - Strategy-specific adjustments: reposition, scale, regenerate, or pause.
+ *  - Maintain player visibility & optionally clear trail when deterministic replay context changes.
+ *
+ * Notes:
+ *  - regenerateTargetsAfterResize currently references legacy helpers (getLevelConfig / createTargetWithSpacing) which
+ *    are pruned; path retained for potential future restoration but effectively inert without those functions.
+ *  - Future enhancement: integrate with deterministic generator to re-seed targets for regenerate strategy.
+ *
+ * Export (window.DSG.resize):
+ *  handleResize(game)
+ */
 (function(){
   function handleResize(game){
     setTimeout(()=>{
