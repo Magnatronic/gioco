@@ -1,4 +1,20 @@
-// Collision detection and target effects extracted from game.js
+/**
+ * Collision detection & target effect handlers.
+ *
+ * Responsibilities:
+ *  - Detect player -> target overlaps (circle vs square approximation)
+ *  - Apply per-target type effects (bonus time reduction, hazard penalty)
+ *  - Maintain session counters & trigger completion when core targets are exhausted.
+ *  - Provide lightweight visual feedback elements (bonus/hazard overlays) with auto cleanup.
+ *
+ * Performance:
+ *  - O(n) per frame over active targets. Adequate for modest counts; spatial partitioning unnecessary now.
+ *
+ * Exports (window.DSG.collision):
+ *  checkCollisions(game)
+ *  collectTarget(game, targetIndex)
+ *  handleHazardCollision(game, target, index)
+ */
 (function(){
   function checkCollisions(game){
     for(let i=game.targets.length-1;i>=0;i--){

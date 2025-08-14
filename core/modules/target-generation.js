@@ -1,6 +1,28 @@
-// Target generation & deterministic seeding utilities extracted from game.js
-// Provides deterministic placement of player and targets based on a replay code seed.
-// All functions operate on a passed game instance to avoid tight coupling.
+/**
+ * Target generation & deterministic seeding utilities.
+ *
+ * Responsibilities:
+ *  - Convert human friendly / replay code strings into numeric seeds (hashCodeToSeed)
+ *  - Maintain a simple linear congruential generator (seedRandom / seededRandom)
+ *  - Deterministically place the player (setSeededPlayerPosition)
+ *  - Deterministically generate spaced targets of requested types (createDeterministicTarget / generateSessionTargets)
+ *  - Local factory for all target type variants (createTargetByType) isolated here after pruning legacy code.
+ *
+ * Design notes:
+ *  - Pure functions operating on a provided game instance to keep coupling low.
+ *  - No direct DOM access except via game update hooks.
+ *  - Reproducibility: given identical session seed + canvas size + config, target order & player start are stable.
+ *  - Safety: generation enforces spacing & overlay avoidance with capped attempts then graceful fallback.
+ *
+ * Exports (window.DSG.targets):
+ *  hashCodeToSeed(seedCode): number
+ *  seedRandom(game, numericSeed): void
+ *  seededRandom(game): number in [0,1)
+ *  setSeededPlayerPosition(game): void
+ *  createDeterministicTarget(game, type, size): TargetObject
+ *  createTargetByType(game, type, x, y, size): TargetObject
+ *  generateSessionTargets(game): void
+ */
 (function(){
   // Factory for different target types (moved from game.js during pruning)
   function createTargetByType(game, type, x, y, size){

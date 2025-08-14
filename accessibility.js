@@ -17,7 +17,7 @@ class AccessibilityManager {
     this._announceInterval = 300; // ms debounce for burst events
         
         this.initialize();
-        console.log('AccessibilityManager initialized');
+    if(window.game && window.game._log){ window.game._log('AccessibilityManager initialized'); }
     }
     
     /**
@@ -251,7 +251,7 @@ class AccessibilityManager {
         requestAnimationFrame(() => {
             element.textContent = text;
         });
-        console.log(`[A11Y ${priority}]:`, text);
+    if(window.game && window.game._log){ window.game._log(`[A11Y ${priority}]:`, text); }
     }
     
     /**
@@ -646,7 +646,7 @@ class AccessibilityManager {
             focusManagement: document.activeElement !== null
         };
         
-        console.log('Accessibility test results:', tests);
+    if(window.game && window.game._log){ window.game._log('Accessibility test results:', tests); }
         return tests;
     }
 }

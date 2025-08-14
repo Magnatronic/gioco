@@ -1,4 +1,21 @@
-// Session timing utilities extracted from game.js
+/**
+ * Session timing utilities.
+ *
+ * Responsibilities:
+ *  - Transition game state from ready -> playing (startSession / beginTimedSession)
+ *  - Compute elapsed session time including pause offsets & bonus/penalty adjustments (calculateSessionTime)
+ *  - Human friendly formatting of elapsed milliseconds (formatTime)
+ *
+ * Time model:
+ *  elapsed = (endTime || now) - startTime - pausedTime + (timeAdjustments * 1000)
+ *  where timeAdjustments is negative for bonuses, positive for penalties.
+ *
+ * Exports (window.DSG.sessionTiming):
+ *  startSession(game)
+ *  beginTimedSession(game)
+ *  calculateSessionTime(game) -> number (ms)
+ *  formatTime(ms) -> string (e.g. 1:05.23 or 12.34s)
+ */
 (function(){
   function startSession(game){
     game.gameState = 'ready';

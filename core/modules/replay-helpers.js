@@ -1,4 +1,18 @@
-// Replay helpers wrapping ReplayCode plus config deep compare.
+/**
+ * Replay helper wrappers & shallow config comparator.
+ *
+ * Responsibilities:
+ *  - Thin wrappers around global ReplayCode utilities (generateFromConfig / decode)
+ *  - Lightweight deep-ish comparison (compareConfigs) for config equality checks without JSON stringify cost.
+ *
+ * Limitations:
+ *  - Comparator skips symbol & non-enumerable properties; designed for plain config objects only.
+ *
+ * Exports (window.DSG.replay):
+ *  generateFromConfig(config) -> string
+ *  decode(code) -> object | null
+ *  compareConfigs(a,b) -> boolean
+ */
 (function(){
   if(!window.ReplayCode) return;
   function generateFromConfig(cfg){ return window.ReplayCode.generateFromConfig(cfg); }
