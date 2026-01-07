@@ -33,7 +33,7 @@ class DirectionalSkillsGame {
             targetSize: 'medium', // 'small', 'medium', 'large', 'extra-large'
             playerSpeed: 3,
             playerTrail: 'short', // 'off', 'short', 'long'
-            inputMethod: 'discrete', // 'discrete', 'continuous', 'mouse'
+            inputMethod: 'discrete', // 'discrete', 'continuous', 'mouse', 'joystick', 'cursor'
             inputBuffer: 300,
             boundaries: 'none', // 'none', 'visual', 'hard'
             feedback: {
@@ -41,7 +41,14 @@ class DirectionalSkillsGame {
                 visual: true,
                 haptic: false
             },
-            seed: null // Random seed for reproducible sessions
+            seed: null, // Random seed for reproducible sessions
+            // New therapeutic options
+            calmMode: false, // Hide timer and progress bar during play
+            dwellMode: false, // Require dwelling on targets to collect
+            dwellTime: 1000, // Dwell duration in milliseconds (500-3000)
+            // Joystick settings
+            joystickDeadzone: 15, // Percentage (5-30)
+            joystickSensitivity: 'medium' // 'low', 'medium', 'high'
         };
         
         // Session data
@@ -83,6 +90,10 @@ class DirectionalSkillsGame {
         // Input system
         this.keys = {};
         this.lastDirection = null;
+        
+        // Cursor position (for cursor-follow input mode)
+        this.cursorX = null;
+        this.cursorY = null;
         
         // Audio system
         this.audioContext = null;
@@ -175,20 +186,52 @@ class DirectionalSkillsGame {
         if (!this.inputBridge) return;
         // Feed events into existing input handlers
         this.inputBridge.on('movement', (evt) => {
+            // Debug joystick event data
+            if (this.sessionConfig.inputMethod === 'joystick' && evt.data) {
+                if (!this._lastJoyLog || Date.now() - this._lastJoyLog > 500) {
+                    console.log('🎮 Game received joystick event:', {
+                        direction: evt.data.direction,
+                        directionVector: evt.data.directionVector,
+                        intensity: evt.data.intensity
+                    });
+                    this._lastJoyLog = Date.now();
+                }
+            }
+            
             const dir = evt.data.direction;
             if (!dir) return;
             // Start timed session on first input
             if (this.gameState === 'ready') this.beginTimedSession();
+            
+            // Handle joystick analog input
+            if (this.sessionConfig.inputMethod === 'joystick') {
+                if (dir === 'stop') {
+                    this.joystickState = null;
+                } else {
+                    // Store joystick state for the update loop
+                    this.joystickState = {
+                        direction: dir,
+                        directionVector: evt.data.directionVector || { x: 0, y: 0 },
+                        intensity: evt.data.intensity || 0,
+                        angle: evt.data.angle || 0
+                    };
+                }
+                return;
+            }
+            
             if (dir === 'stop') {
-                // No-op; discrete movement relies on key state
+                // No-op for discrete; continuous might need to handle
+                if (this.sessionConfig.inputMethod === 'continuous') {
+                    this.player.isMoving = false;
+                    this.player.continuousDirection = null;
+                }
                 return;
             }
             if (this.sessionConfig.inputMethod === 'continuous') {
                 this.setContinuousDirection(dir);
-            } else if (this.sessionConfig.inputMethod === 'discrete') {
-                // Directly move a small step to emulate key repeat when buffer enabled
-                this.movePlayer(dir);
             }
+            // Note: discrete mode is handled by updateDiscreteMovement() in the update loop
+            // which checks this.keys[] state - no need to call movePlayer here
         });
         this.inputBridge.on('action', (evt) => {
             const action = evt.data.action;
@@ -664,6 +707,17 @@ class DirectionalSkillsGame {
             this.mouseClickHandler = (e) => this.handleMouseClick(e);
             this.canvas.addEventListener('click', this.mouseClickHandler);
             this.setCursor('crosshair');
+        } else if (this.sessionConfig.inputMethod === 'cursor') {
+            // Cursor-follow mode: track mouse/cursor position continuously
+            this.mouseMoveHandler = (e) => this.handleMouseMove(e);
+            this.canvas.addEventListener('mousemove', this.mouseMoveHandler);
+            // Also track when cursor leaves canvas
+            this.mouseLeaveHandler = () => {
+                // Keep last known position - don't reset to null
+                // This prevents jerky behavior when cursor briefly leaves canvas
+            };
+            this.canvas.addEventListener('mouseleave', this.mouseLeaveHandler);
+            this.setCursor('none'); // Hide system cursor in cursor-follow mode
         } else {
             this.setCursor('default');
             // Clear any existing mouse target when mouse click is disabled
@@ -679,6 +733,21 @@ class DirectionalSkillsGame {
             this.canvas.removeEventListener('click', this.mouseClickHandler);
             this.mouseClickHandler = null;
         }
+        if (this.mouseMoveHandler) {
+            this.canvas.removeEventListener('mousemove', this.mouseMoveHandler);
+            this.mouseMoveHandler = null;
+        }
+        if (this.mouseLeaveHandler) {
+            this.canvas.removeEventListener('mouseleave', this.mouseLeaveHandler);
+            this.mouseLeaveHandler = null;
+        }
+    }
+    
+    handleMouseMove(e) {
+        // Update cursor position for cursor-follow mode
+        const rect = this.canvas.getBoundingClientRect();
+        this.cursorX = e.clientX - rect.left;
+        this.cursorY = e.clientY - rect.top;
     }
     
     handleKeyDown(e) {
@@ -788,8 +857,8 @@ class DirectionalSkillsGame {
     update() {
         if (this.gameState !== 'playing' && this.gameState !== 'ready') return;
         
-        // Update timer display in real-time (only when playing)
-        if (this.gameState === 'playing') {
+        // Update timer display in real-time (only when playing, and not in calm mode)
+        if (this.gameState === 'playing' && !this.sessionConfig.calmMode) {
             this.updateTimerDisplay();
         }
         
@@ -806,6 +875,10 @@ class DirectionalSkillsGame {
             this.updateDiscreteMovement();
         } else if (this.sessionConfig.inputMethod === 'mouse') {
             this.updateClickToMove();
+        } else if (this.sessionConfig.inputMethod === 'joystick') {
+            this.updateJoystickMovement();
+        } else if (this.sessionConfig.inputMethod === 'cursor') {
+            this.updateCursorFollowMovement();
         }
         
         // Target motion (moving + flee)
@@ -815,6 +888,88 @@ class DirectionalSkillsGame {
 
         // Collision checks (legacy discrete step) remain delegated
         if(this.gameState === 'playing') this.checkCollisions();
+    }
+    
+    // Handle joystick/gamepad analog movement
+    updateJoystickMovement() {
+        // Joystick movement is handled via the input bridge events
+        // This method processes the last received joystick state
+        if (!this.joystickState) return;
+        
+        const { directionVector, intensity } = this.joystickState;
+        if (!directionVector || intensity === 0) return;
+        
+        // Calculate movement based on analog input
+        // Uses the same playerSpeed setting as other input methods for consistency
+        const baseSpeed = this.sessionConfig.playerSpeed * 2;
+        const speed = baseSpeed * intensity; // Proportional speed based on stick deflection
+        
+        const oldX = this.player.x;
+        const oldY = this.player.y;
+        
+        // Move in the direction of the stick
+        this.player.x += directionVector.x * speed;
+        this.player.y += directionVector.y * speed;
+        
+        // Keep within bounds
+        this.player.x = Math.max(this.player.size, Math.min(this.canvas.width - this.player.size, this.player.x));
+        this.player.y = Math.max(this.player.size, Math.min(this.canvas.height - this.player.size, this.player.y));
+        
+        // Update direction indicator based on primary axis
+        if (Math.abs(directionVector.x) > Math.abs(directionVector.y)) {
+            this.lastDirection = directionVector.x > 0 ? 'right' : 'left';
+        } else {
+            this.lastDirection = directionVector.y > 0 ? 'down' : 'up';
+        }
+        
+        // Add to trail if player moved
+        if (oldX !== this.player.x || oldY !== this.player.y) {
+            this.addToTrail(oldX, oldY);
+        }
+    }
+
+    // Handle cursor-follow movement (for Optima joystick, head trackers, eye gaze)
+    updateCursorFollowMovement() {
+        // Only move if we have a valid cursor position
+        if (this.cursorX === null || this.cursorY === null) {
+            return;
+        }
+        
+        const oldX = this.player.x;
+        const oldY = this.player.y;
+        
+        // Direct 1:1 mapping - player position matches cursor exactly
+        // This gives immediate feedback for joystick/assistive device practice
+        this.player.x = this.cursorX;
+        this.player.y = this.cursorY;
+        
+        // Keep within bounds
+        this.player.x = Math.max(this.player.size, Math.min(this.canvas.width - this.player.size, this.player.x));
+        this.player.y = Math.max(this.player.size, Math.min(this.canvas.height - this.player.size, this.player.y));
+        
+        // Check if player actually moved
+        const dx = this.player.x - oldX;
+        const dy = this.player.y - oldY;
+        const moved = Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5;
+        
+        // Start timed session on first movement
+        if (this.gameState === 'ready' && moved) {
+            this.beginTimedSession();
+        }
+        
+        // Update direction indicator based on movement direction
+        if (moved) {
+            if (Math.abs(dx) > Math.abs(dy)) {
+                this.lastDirection = dx > 0 ? 'right' : 'left';
+            } else {
+                this.lastDirection = dy > 0 ? 'down' : 'up';
+            }
+            
+            // Add to trail
+            this.addToTrail(oldX, oldY);
+        }
+        
+        this.checkCollisions();
     }
 
     updateClickToMove() {
@@ -944,6 +1099,11 @@ class DirectionalSkillsGame {
             // Draw player
             this.drawPlayer();
             
+            // Draw cursor indicator for cursor-follow mode
+            if (this.sessionConfig.inputMethod === 'cursor') {
+                this.drawCursorIndicator();
+            }
+            
             // Draw ready instructions if in ready state
             if (this.gameState === 'ready') {
                 this.drawReadyInstructions();
@@ -980,37 +1140,78 @@ class DirectionalSkillsGame {
     }
     
     drawPlayer() {
-        // Draw player as a rounded rectangle to distinguish from circular targets
+        // Draw player as a solid rounded square with circular crosshair overlay
+        // Note: player.size is the collision radius, visual size should match
         const size = this.player.size;
-        const cornerRadius = size * 0.3; // Rounded corners
+        const radius = size * 0.3; // Corner radius for rounded edges
         
-        // Add a subtle glow effect for better visibility
-        this.ctx.shadowColor = '#ffffff';
-        this.ctx.shadowBlur = 8;
-        
-        // Draw player border for enhanced visibility
+        // Draw white border for visibility (rounded)
         this.ctx.strokeStyle = '#ffffff';
         this.ctx.lineWidth = 3;
-        this.drawRoundedRect(this.player.x - size, this.player.y - size, size * 2, size * 2, cornerRadius, false, true);
+        this.drawRoundedRect(this.player.x - size, this.player.y - size, size * 2, size * 2, radius, false, true);
         
-        // Draw main player rounded rectangle
+        // Draw solid filled rounded square
         this.ctx.fillStyle = this.player.color;
-        this.drawRoundedRect(this.player.x - size, this.player.y - size, size * 2, size * 2, cornerRadius, true, false);
+        this.drawRoundedRect(this.player.x - size, this.player.y - size, size * 2, size * 2, radius, true, false);
         
-        // Reset shadow effects
-        this.ctx.shadowBlur = 0;
-        this.ctx.shadowColor = 'transparent';
+        // Draw circular crosshair (white for contrast)
+        this.ctx.strokeStyle = '#ffffff';
+        this.ctx.lineWidth = 2;
         
-        // Draw direction indicator with simple, thick arrow
-        if (this.lastDirection) {
-            // Draw custom thick arrow shape
-            this.ctx.fillStyle = '#000000'; // Black arrow
-            this.ctx.strokeStyle = '#ffffff'; // White outline for visibility
-            this.ctx.lineWidth = 1;
-            
-            const arrowSize = size * 0.5;
-            this.drawCustomArrow(this.player.x, this.player.y, arrowSize, this.lastDirection);
-        }
+        // Circle in center
+        this.ctx.beginPath();
+        this.ctx.arc(this.player.x, this.player.y, size * 0.5, 0, Math.PI * 2);
+        this.ctx.stroke();
+        
+        // Crosshair lines
+        this.ctx.beginPath();
+        // Horizontal line
+        this.ctx.moveTo(this.player.x - size * 0.8, this.player.y);
+        this.ctx.lineTo(this.player.x + size * 0.8, this.player.y);
+        // Vertical line
+        this.ctx.moveTo(this.player.x, this.player.y - size * 0.8);
+        this.ctx.lineTo(this.player.x, this.player.y + size * 0.8);
+        this.ctx.stroke();
+        
+        // Small center dot
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.beginPath();
+        this.ctx.arc(this.player.x, this.player.y, 2, 0, Math.PI * 2);
+        this.ctx.fill();
+    }
+    
+    drawCursorIndicator() {
+        // Draw a crosshair/target at cursor position for cursor-follow mode
+        if (this.cursorX === null || this.cursorY === null) return;
+        
+        const size = 15;
+        
+        // Draw outer circle
+        this.ctx.strokeStyle = '#e74c3c'; // Red for visibility
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.arc(this.cursorX, this.cursorY, size, 0, Math.PI * 2);
+        this.ctx.stroke();
+        
+        // Draw crosshair lines
+        this.ctx.beginPath();
+        // Horizontal line
+        this.ctx.moveTo(this.cursorX - size - 5, this.cursorY);
+        this.ctx.lineTo(this.cursorX - size / 2, this.cursorY);
+        this.ctx.moveTo(this.cursorX + size / 2, this.cursorY);
+        this.ctx.lineTo(this.cursorX + size + 5, this.cursorY);
+        // Vertical line
+        this.ctx.moveTo(this.cursorX, this.cursorY - size - 5);
+        this.ctx.lineTo(this.cursorX, this.cursorY - size / 2);
+        this.ctx.moveTo(this.cursorX, this.cursorY + size / 2);
+        this.ctx.lineTo(this.cursorX, this.cursorY + size + 5);
+        this.ctx.stroke();
+        
+        // Draw center dot
+        this.ctx.fillStyle = '#e74c3c';
+        this.ctx.beginPath();
+        this.ctx.arc(this.cursorX, this.cursorY, 3, 0, Math.PI * 2);
+        this.ctx.fill();
     }
     
     drawReadyInstructions() {
@@ -1031,6 +1232,8 @@ class DirectionalSkillsGame {
         // Simple clear message
         if (this.sessionConfig.inputMethod === 'mouse') {
             this.ctx.fillText('Click to start', centerX, centerY);
+        } else if (this.sessionConfig.inputMethod === 'cursor') {
+            this.ctx.fillText('Move cursor to start', centerX, centerY);
         } else {
             this.ctx.fillText('Move to start', centerX, centerY);
         }
@@ -1156,11 +1359,38 @@ class DirectionalSkillsGame {
                 break;
         }
         
-        // Add type indicator for moving and flee targets only
-        // Removed - using pure solid shapes for therapeutic simplicity
+        // Draw dwell progress ring if in dwell mode and target has progress
+        if (this.sessionConfig.dwellMode && target.dwellProgress && target.dwellProgress > 0) {
+            this.drawDwellProgressRing(target.x, target.y, size, target.dwellProgress);
+        }
         
         // Reset shadow effects
         this.ctx.shadowBlur = 0;
+    }
+    
+    // Draw dwell progress ring around target
+    drawDwellProgressRing(x, y, size, progress) {
+        const ringRadius = size + 8;
+        const ringWidth = 6;
+        
+        // Background ring (grey)
+        this.ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+        this.ctx.lineWidth = ringWidth;
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
+        this.ctx.stroke();
+        
+        // Progress ring (green gradient based on progress)
+        const startAngle = -Math.PI / 2; // Start from top
+        const endAngle = startAngle + (progress * Math.PI * 2);
+        
+        this.ctx.strokeStyle = progress < 0.5 ? '#3498db' : (progress < 0.8 ? '#f39c12' : '#27ae60');
+        this.ctx.lineWidth = ringWidth;
+        this.ctx.lineCap = 'round';
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, ringRadius, startAngle, endAngle);
+        this.ctx.stroke();
+        this.ctx.lineCap = 'butt';
     }
 
     drawTargetTypeIndicator(target, size) {
@@ -1613,6 +1843,41 @@ class DirectionalSkillsGame {
         document.getElementById('input-buffer').value = this.sessionConfig.inputBuffer;
         document.getElementById('input-buffer-value').textContent = this.sessionConfig.inputBuffer + 'ms';
         
+        // Joystick settings
+        const joystickSettings = document.getElementById('joystick-settings');
+        if (joystickSettings) {
+            joystickSettings.style.display = this.sessionConfig.inputMethod === 'joystick' ? 'block' : 'none';
+        }
+        const deadzoneSlider = document.getElementById('joystick-deadzone');
+        if (deadzoneSlider) {
+            deadzoneSlider.value = this.sessionConfig.joystickDeadzone || 15;
+            document.getElementById('joystick-deadzone-value').textContent = (this.sessionConfig.joystickDeadzone || 15) + '%';
+        }
+        const sensitivityRadio = document.querySelector(`input[name="joystick-sensitivity"][value="${this.sessionConfig.joystickSensitivity || 'medium'}"]`);
+        if (sensitivityRadio) sensitivityRadio.checked = true;
+        
+        // Dwell mode settings
+        const dwellModeCheckbox = document.getElementById('dwell-mode');
+        if (dwellModeCheckbox) {
+            dwellModeCheckbox.checked = this.sessionConfig.dwellMode || false;
+        }
+        const dwellSettings = document.getElementById('dwell-settings');
+        if (dwellSettings) {
+            dwellSettings.style.display = this.sessionConfig.dwellMode ? 'block' : 'none';
+        }
+        const dwellTimeSlider = document.getElementById('dwell-time');
+        if (dwellTimeSlider) {
+            dwellTimeSlider.value = this.sessionConfig.dwellTime || 1000;
+            const seconds = ((this.sessionConfig.dwellTime || 1000) / 1000).toFixed(1);
+            document.getElementById('dwell-time-value').textContent = seconds + 's';
+        }
+        
+        // Calm mode
+        const calmModeCheckbox = document.getElementById('calm-mode');
+        if (calmModeCheckbox) {
+            calmModeCheckbox.checked = this.sessionConfig.calmMode || false;
+        }
+        
         // Environment
         document.querySelector(`input[name="game-boundaries"][value="${this.sessionConfig.boundaries}"]`).checked = true;
         document.getElementById('feedback-audio').checked = this.sessionConfig.feedback.audio;
@@ -1678,6 +1943,59 @@ class DirectionalSkillsGame {
             this.updateLiveReplayCode();
         });
         
+        // Joystick settings visibility toggle
+        document.querySelectorAll('input[name="input-method"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const joystickSettings = document.getElementById('joystick-settings');
+                if (joystickSettings) {
+                    joystickSettings.style.display = e.target.value === 'joystick' ? 'block' : 'none';
+                }
+                this.updateLiveReplayCode();
+            });
+        });
+        
+        // Joystick deadzone slider
+        const deadzoneSlider = document.getElementById('joystick-deadzone');
+        if (deadzoneSlider) {
+            deadzoneSlider.addEventListener('input', (e) => {
+                document.getElementById('joystick-deadzone-value').textContent = e.target.value + '%';
+                this.updateLiveReplayCode();
+            });
+        }
+        
+        // Joystick sensitivity radios
+        document.querySelectorAll('input[name="joystick-sensitivity"]').forEach(radio => {
+            radio.addEventListener('change', () => this.updateLiveReplayCode());
+        });
+        
+        // Dwell mode toggle
+        const dwellModeCheckbox = document.getElementById('dwell-mode');
+        if (dwellModeCheckbox) {
+            dwellModeCheckbox.addEventListener('change', (e) => {
+                const dwellSettings = document.getElementById('dwell-settings');
+                if (dwellSettings) {
+                    dwellSettings.style.display = e.target.checked ? 'block' : 'none';
+                }
+                this.updateLiveReplayCode();
+            });
+        }
+        
+        // Dwell time slider
+        const dwellTimeSlider = document.getElementById('dwell-time');
+        if (dwellTimeSlider) {
+            dwellTimeSlider.addEventListener('input', (e) => {
+                const seconds = (parseInt(e.target.value) / 1000).toFixed(1);
+                document.getElementById('dwell-time-value').textContent = seconds + 's';
+                this.updateLiveReplayCode();
+            });
+        }
+        
+        // Calm mode checkbox
+        const calmModeCheckbox = document.getElementById('calm-mode');
+        if (calmModeCheckbox) {
+            calmModeCheckbox.addEventListener('change', () => this.updateLiveReplayCode());
+        }
+        
         // Environment settings
         document.querySelectorAll('input[name="game-boundaries"]').forEach(radio => {
             radio.addEventListener('change', () => this.updateLiveReplayCode());
@@ -1740,7 +2058,13 @@ class DirectionalSkillsGame {
             inputMethod,
             inputBuffer,
             boundaries,
-            feedback: { audio: feedbackAudio, visual: feedbackVisual, haptic: feedbackHaptic }
+            feedback: { audio: feedbackAudio, visual: feedbackVisual, haptic: feedbackHaptic },
+            // New therapeutic options
+            calmMode: document.getElementById('calm-mode')?.checked || false,
+            dwellMode: document.getElementById('dwell-mode')?.checked || false,
+            dwellTime: parseInt(document.getElementById('dwell-time')?.value) || 1000,
+            joystickDeadzone: parseInt(document.getElementById('joystick-deadzone')?.value) || 15,
+            joystickSensitivity: document.querySelector('input[name="joystick-sensitivity"]:checked')?.value || 'medium'
         };
         
         console.log('🔍 getFormConfigForCode returning:', formConfig);
@@ -1888,6 +2212,24 @@ class DirectionalSkillsGame {
         this.sessionConfig.inputMethod = document.querySelector('input[name="input-method"]:checked').value;
         this.sessionConfig.inputBuffer = parseInt(document.getElementById('input-buffer').value);
         
+        // Joystick settings (only relevant when joystick input is selected)
+        const joystickDeadzoneEl = document.getElementById('joystick-deadzone');
+        const joystickSensitivityEl = document.querySelector('input[name="joystick-sensitivity"]:checked');
+        if (joystickDeadzoneEl) {
+            this.sessionConfig.joystickDeadzone = parseInt(joystickDeadzoneEl.value);
+        }
+        if (joystickSensitivityEl) {
+            this.sessionConfig.joystickSensitivity = joystickSensitivityEl.value;
+        }
+        
+        // Update joystick input config if using UniversalInputManager
+        if (this.inputBridge && this.sessionConfig.inputMethod === 'joystick') {
+            this.inputBridge.updateConfig('joystick', {
+                deadzone: this.sessionConfig.joystickDeadzone,
+                sensitivity: this.sessionConfig.joystickSensitivity
+            });
+        }
+        
         // Reset player movement state when input method changes
         if (this.player) {
             this.player.continuousDirection = null;
@@ -1896,11 +2238,27 @@ class DirectionalSkillsGame {
             this.player.targetY = null;
         }
         
+        // Collection mode (dwell)
+        const dwellModeEl = document.getElementById('dwell-mode');
+        const dwellTimeEl = document.getElementById('dwell-time');
+        if (dwellModeEl) {
+            this.sessionConfig.dwellMode = dwellModeEl.checked;
+        }
+        if (dwellTimeEl) {
+            this.sessionConfig.dwellTime = parseInt(dwellTimeEl.value);
+        }
+        
         // Environment
         this.sessionConfig.boundaries = document.querySelector('input[name="game-boundaries"]:checked').value;
         this.sessionConfig.feedback.audio = document.getElementById('feedback-audio').checked;
         this.sessionConfig.feedback.visual = document.getElementById('feedback-visual').checked;
         this.sessionConfig.feedback.haptic = document.getElementById('feedback-haptic').checked;
+        
+        // Calm mode
+        const calmModeEl = document.getElementById('calm-mode');
+        if (calmModeEl) {
+            this.sessionConfig.calmMode = calmModeEl.checked;
+        }
         
         // Generate the final replay code AFTER all configuration is set
         this.sessionConfig.seed = this.generateReplayCodeFromConfig(this.sessionConfig);
@@ -2071,6 +2429,9 @@ class DirectionalSkillsGame {
         document.getElementById('main-menu').style.display = 'none';
         document.getElementById('game-interface').style.display = 'flex';
         
+        // Apply calm mode visibility settings
+        this.applyCalmModeVisibility();
+        
         // Ensure canvas is properly sized with a small delay to allow layout
         setTimeout(() => {
             this.setupCanvas();
@@ -2089,11 +2450,31 @@ class DirectionalSkillsGame {
         }, 100);
     }
     
+    // Apply calm mode visibility (hide/show timer and progress)
+    applyCalmModeVisibility() {
+        const metricsOverlay = document.querySelector('.metrics-overlay');
+        const progressOverlay = document.querySelector('.progress-overlay');
+        
+        if (this.sessionConfig.calmMode) {
+            if (metricsOverlay) metricsOverlay.style.display = 'none';
+            if (progressOverlay) progressOverlay.style.display = 'none';
+        } else {
+            if (metricsOverlay) metricsOverlay.style.display = 'flex';
+            if (progressOverlay) progressOverlay.style.display = 'block';
+        }
+    }
+    
     returnToMainMenu() {
         // Pause/stop current session
         if (this.gameState === 'playing') {
             this.pauseGame();
         }
+        
+        // Restore UI elements that may have been hidden by calm mode
+        const metricsOverlay = document.querySelector('.metrics-overlay');
+        const progressOverlay = document.querySelector('.progress-overlay');
+        if (metricsOverlay) metricsOverlay.style.display = 'flex';
+        if (progressOverlay) progressOverlay.style.display = 'block';
         
         // Show main menu and hide game interface
     document.getElementById('main-menu').style.display = 'flex';

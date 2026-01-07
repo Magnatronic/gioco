@@ -292,8 +292,33 @@
                                 <label><input type="radio" name="input-method" value="discrete" checked> Discrete Movement (Arrow Keys + WASD)</label>
                                 <label><input type="radio" name="input-method" value="continuous"> Continuous Movement (Snake-style)</label>
                                 <label><input type="radio" name="input-method" value="mouse"> Mouse Click-to-Move</label>
+                                <label><input type="radio" name="input-method" value="joystick"> Joystick/Gamepad (Analog Control)</label>
+                                <label><input type="radio" name="input-method" value="cursor"> Cursor Follow (Optima/Mouse/Eye Gaze)</label>
                             </div>
-                            <small class="field-help">Choose one control method. Discrete: press and hold keys. Continuous: single press changes direction. Mouse: point and click.</small>
+                            <small class="field-help">Choose one control method. Discrete: press and hold keys. Continuous: single press changes direction. Mouse: point and click. Joystick: proportional analog control. Cursor Follow: player follows cursor position - works with Optima joysticks, head trackers, or eye gaze.</small>
+                        </div>
+                        
+                        <!-- Joystick-specific settings (shown when joystick is selected) -->
+                        <div class="form-group joystick-settings" id="joystick-settings" style="display: none;">
+                            <div class="joystick-status disconnected" id="joystick-status">
+                                <span class="material-icons">gamepad</span>
+                                <span id="joystick-status-text">Press any button on controller...</span>
+                            </div>
+                            
+                            <label for="joystick-deadzone">Dead Zone:</label>
+                            <div class="input-with-value">
+                                <input type="range" id="joystick-deadzone" min="5" max="30" value="15" step="5">
+                                <span id="joystick-deadzone-value" class="range-value">15%</span>
+                            </div>
+                            <small class="field-help">Ignore small unintentional stick movements. Higher values require more deliberate input.</small>
+                            
+                            <label>Sensitivity:</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="joystick-sensitivity" value="low"> Low (Gradual)</label>
+                                <label><input type="radio" name="joystick-sensitivity" value="medium" checked> Medium</label>
+                                <label><input type="radio" name="joystick-sensitivity" value="high"> High (Responsive)</label>
+                            </div>
+                            <small class="field-help">Controls how stick deflection ramps up to full speed. Use the Movement Speed setting above for overall speed.</small>
                         </div>
                         
                         <div class="form-group">
@@ -307,6 +332,27 @@
                     </fieldset>
                     
                     <fieldset>
+                        <legend>Collection Mode</legend>
+                        
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="dwell-mode"> 
+                                Require dwell to collect targets
+                            </label>
+                            <small class="field-help">When enabled, you must stay inside a target for a set time to collect it. Good for precision training.</small>
+                        </div>
+                        
+                        <div class="form-group dwell-settings" id="dwell-settings" style="display: none;">
+                            <label for="dwell-time">Dwell Time:</label>
+                            <div class="input-with-value">
+                                <input type="range" id="dwell-time" min="500" max="3000" value="1000" step="250">
+                                <span id="dwell-time-value" class="range-value">1.0s</span>
+                            </div>
+                            <small class="field-help">How long to stay inside a target to collect it. Flee and hazard targets are not affected.</small>
+                        </div>
+                    </fieldset>
+                    
+                    <fieldset>
                         <legend>Game Environment</legend>
                         
                         <div class="form-group">
@@ -316,6 +362,14 @@
                                 <label><input type="radio" name="game-boundaries" value="visual"> Visual Guidelines</label>
                                 <label><input type="radio" name="game-boundaries" value="hard"> Hard Walls</label>
                             </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="calm-mode"> 
+                                Calm mode (hide timer and progress during play)
+                            </label>
+                            <small class="field-help">Reduces pressure by hiding competitive elements. Time is still recorded for review after completion.</small>
                         </div>
                         
                         <div class="form-group">
@@ -551,6 +605,8 @@
     <script src="core/modules/resize-handling.js"></script>
     <!-- Target motion (moving + flee behaviors) -->
     <script src="core/modules/target-motion.js"></script>
+    <!-- Input manager must load before game.js -->
+    <script src="input-manager.js"></script>
     <!-- Load main game class early so window.DirectionalSkillsGame exists before scenes -->
     <script src="game.js"></script>
     <script src="core/game-scene.js"></script>
@@ -566,7 +622,6 @@
     <script src="core/pause-scene.js"></script>
     <script src="mini-games/registry.js"></script>
     <script src="mini-games/directional-practice.js"></script>
-    <script src="input-manager.js"></script>
 
     <!-- Switch scanning overlay (shown when Switch input is enabled) -->
     <div id="switch-overlay" role="region" aria-label="Switch scanning overlay" style="display:none"></div>

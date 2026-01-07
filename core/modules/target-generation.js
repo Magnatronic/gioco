@@ -24,6 +24,9 @@
  *  generateSessionTargets(game): void
  */
 (function(){
+  // Unique ID counter for targets
+  let targetIdCounter = 0;
+  
   // Factory for different target types (moved from game.js during pruning)
   function createTargetByType(game, type, x, y, size){
     const baseTarget = {
@@ -31,7 +34,8 @@
       type,
       points: type === 'bonus' ? 200 : 100,
       collectible: true,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      id: ++targetIdCounter  // Unique ID for dwell mode tracking
     };
     switch(type){
       case 'static':
@@ -132,7 +136,8 @@
       if(t){ game.targets.push(t); totalTargets = 1; }
     }
     game.currentSession.totalTargets = totalTargets;
-    game.player.size = targetSize;
+    // Player size is 3/4 of target size
+    game.player.size = targetSize * 0.75;
     game.currentSession.totalCoreTargets = (game.sessionConfig.targetCounts.stationary||0)+(game.sessionConfig.targetCounts.moving||0)+(game.sessionConfig.targetCounts.flee||0);
     if(game.currentSession.totalCoreTargets===0 && totalTargets>0){
       const t = createDeterministicTarget(game,'static',targetSize);
