@@ -21,6 +21,21 @@
     game.gameState = 'ready';
     game.canvas.focus();
     game.updatePlayPauseButton();
+    
+    // Switch to the selected input method for this session
+    if (game.inputBridge && game.sessionConfig.inputMethod) {
+      const methodMap = {
+        'discrete': 'keyboard',
+        'continuous': 'keyboard',
+        'mouse': 'keyboard',  // Mouse uses keyboard input with click handler
+        'joystick': 'joystick',
+        'cursor': 'keyboard'  // Cursor mode uses mouse tracking, but keyboard for other controls
+      };
+      const inputMethod = methodMap[game.sessionConfig.inputMethod] || 'keyboard';
+      console.log('🎮 Switching input method to:', inputMethod, 'for session mode:', game.sessionConfig.inputMethod);
+      game.inputBridge.switchInputMethod(inputMethod);
+    }
+    
     game.announceToScreenReader && game.announceToScreenReader('Session ready. Press any movement key or click to start the timer and begin.');
   }
   function beginTimedSession(game){

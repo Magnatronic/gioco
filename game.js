@@ -220,11 +220,9 @@ class DirectionalSkillsGame {
             }
             
             if (dir === 'stop') {
-                // No-op for discrete; continuous might need to handle
-                if (this.sessionConfig.inputMethod === 'continuous') {
-                    this.player.isMoving = false;
-                    this.player.continuousDirection = null;
-                }
+                // In continuous/snake mode, we DON'T stop when keys are released
+                // The player keeps moving in the last direction until a new direction is pressed
+                // Only discrete and other modes might need stop handling
                 return;
             }
             if (this.sessionConfig.inputMethod === 'continuous') {
@@ -952,8 +950,9 @@ class DirectionalSkillsGame {
         const dy = this.player.y - oldY;
         const moved = Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5;
         
-        // Start timed session on first movement
-        if (this.gameState === 'ready' && moved) {
+        // Start timed session on first cursor position (not just movement)
+        // This is important for dwell mode where user may position cursor and hold still
+        if (this.gameState === 'ready') {
             this.beginTimedSession();
         }
         
@@ -2236,6 +2235,11 @@ class DirectionalSkillsGame {
             this.player.isMoving = false;
             this.player.targetX = null;
             this.player.targetY = null;
+        }
+        // Reset cursor position when switching away from cursor mode
+        if (this.sessionConfig.inputMethod !== 'cursor') {
+            this.cursorX = null;
+            this.cursorY = null;
         }
         
         // Collection mode (dwell)
