@@ -5,12 +5,22 @@
 
 class UniversalInputManager {
     constructor() {
+        console.log('🎮 UniversalInputManager constructor starting...');
+        
+        // Check if GamepadInput exists
+        if (typeof GamepadInput === 'undefined') {
+            console.error('🎮 ERROR: GamepadInput class not defined yet!');
+        }
+        
         this.inputMethods = {
             keyboard: new KeyboardInput(),
             switch: new SwitchInput(),
             eyeGaze: new EyeGazeInput(),
-            touch: new TouchInput()
+            touch: new TouchInput(),
+            joystick: new GamepadInput()
         };
+        
+        console.log('🎮 UniversalInputManager: All input methods created');
         
         this.activeMethod = 'keyboard'; // Default input method
         this.eventQueue = [];
@@ -66,6 +76,11 @@ class UniversalInputManager {
                 sensitivity: 1.0,
                 gesturesEnabled: true,
                 hapticFeedback: true
+            },
+            joystick: {
+                deadzone: 15,
+                sensitivity: 'medium',
+                pollRate: 16
             }
         };
     }
@@ -93,6 +108,14 @@ class UniversalInputManager {
      * Process input from any input method into unified game events
      */
     processInput(inputEvent) {
+        // Debug: log received events
+        if (inputEvent.data && inputEvent.data.type === 'movement' && inputEvent.data.direction !== 'stop') {
+            if (!this._lastProcessLog || Date.now() - this._lastProcessLog > 500) {
+                console.log('🎮 UniversalInputManager.processInput received:', inputEvent.inputMethod, inputEvent.data.direction);
+                this._lastProcessLog = Date.now();
+            }
+        }
+        
         const gameEvent = this.translateToGameEvent(inputEvent);
         if (gameEvent) {
             this.eventQueue.push(gameEvent);
@@ -106,18 +129,23 @@ class UniversalInputManager {
     translateToGameEvent(inputEvent) {
         const { type, data, inputMethod } = inputEvent;
         
+        // The event type from emit is 'input', actual type is in data.type
+        const eventType = data?.type || type;
+        
         // Movement events
-        if (type === 'movement') {
+        if (eventType === 'movement') {
             return new GameEvent('movement', {
                 direction: data.direction,
+                directionVector: data.directionVector, // Include analog data
                 intensity: data.intensity || 1.0,
+                angle: data.angle,
                 inputMethod: inputMethod,
                 timestamp: Date.now()
             });
         }
         
         // Action events
-        if (type === 'action') {
+        if (eventType === 'action') {
             return new GameEvent('action', {
                 action: data.action,
                 inputMethod: inputMethod,
@@ -126,7 +154,7 @@ class UniversalInputManager {
         }
         
         // Interface events
-        if (type === 'interface') {
+        if (eventType === 'interface') {
             return new GameEvent('interface', {
                 command: data.command,
                 inputMethod: inputMethod,
@@ -261,6 +289,7 @@ class BaseInput {
     }
     
     enable() {
+        console.log(`🎮 ${this.type} input ENABLED`);
         this.enabled = true;
         this.bindEvents();
     }
@@ -284,6 +313,15 @@ class BaseInput {
     
     emit(eventType, data) {
         const listeners = this.listeners.get(eventType) || [];
+        
+        // Debug logging for movement events
+        if (data && data.type === 'movement' && data.direction !== 'stop') {
+            if (!this._lastEmitLog || Date.now() - this._lastEmitLog > 500) {
+                console.log(`🎮 ${this.type} emitting:`, eventType, 'direction:', data.direction, 'listeners:', listeners.length);
+                this._lastEmitLog = Date.now();
+            }
+        }
+        
         const event = {
             type: eventType,
             data: data,
@@ -818,6 +856,377 @@ class TouchInput extends BaseInput {
 }
 
 /**
+ * Gamepad/Joystick Input Handler
+ * Provides analog proportional control for wheelchair joysticks and standard gamepads
+ */
+class GamepadInput extends BaseInput {
+    constructor() {
+        super('joystick');
+        this.gamepad = null;
+        this.gamepadIndex = null;
+        this.pollInterval = null;
+        this.scanInterval = null; // For scanning when no gamepad detected
+        this.config = {
+            deadzone: 0.15, // 15% default
+            sensitivity: 'medium', // 'low', 'medium', 'high'
+            pollRate: 16 // ~60fps polling
+        };
+        this.lastDirection = { x: 0, y: 0 };
+        this.isMoving = false;
+        
+        // Sensitivity curves (how stick deflection maps to speed)
+        this.sensitivityCurves = {
+            low: (v) => Math.pow(v, 2), // Quadratic - gradual start
+            medium: (v) => v, // Linear
+            high: (v) => Math.pow(v, 0.5) // Square root - quick response
+        };
+        
+        // Listen for gamepad connections globally
+        this.setupGlobalListeners();
+        
+        // Store reference globally so early event handlers can notify us
+        window._gamepadInputInstance = this;
+        
+        // Start scanning for gamepads immediately
+        this.startScanning();
+        
+        // Start polling immediately too (will detect gamepad even if not enabled)
+        this.startPolling();
+        
+        // Also check immediately (some controllers already connected)
+        setTimeout(() => this.checkExistingGamepads(), 100);
+        
+        // Check if any gamepads were detected before we were created
+        if (window._detectedGamepads && window._detectedGamepads.length > 0) {
+            console.log('🎮 GamepadInput found pre-detected gamepads:', window._detectedGamepads);
+            this.checkExistingGamepads();
+        }
+        
+        console.log('🎮 GamepadInput initialized - awaiting controller input');
+    }
+    
+    setupGlobalListeners() {
+        window.addEventListener('gamepadconnected', (e) => {
+            console.log('🎮 gamepadconnected event fired:', e.gamepad.id);
+            this.onGamepadConnected(e);
+        });
+        window.addEventListener('gamepaddisconnected', (e) => {
+            console.log('🎮 gamepaddisconnected event fired:', e.gamepad.id);
+            this.onGamepadDisconnected(e);
+        });
+    }
+    
+    onGamepadConnected(event) {
+        console.log('🎮 Gamepad connected:', event.gamepad.id);
+        this.gamepad = event.gamepad;
+        this.gamepadIndex = event.gamepad.index;
+        
+        // Notify listeners
+        this.emit('input', {
+            type: 'system',
+            event: 'gamepadConnected',
+            gamepadId: event.gamepad.id
+        });
+        
+        // Update UI status
+        this.updateConnectionStatus(true, event.gamepad.id);
+    }
+    
+    onGamepadDisconnected(event) {
+        console.log('🎮 Gamepad disconnected:', event.gamepad.id);
+        if (this.gamepadIndex === event.gamepad.index) {
+            this.gamepad = null;
+            this.gamepadIndex = null;
+            
+            // Notify listeners
+            this.emit('input', {
+                type: 'system',
+                event: 'gamepadDisconnected'
+            });
+            
+            // Update UI status
+            this.updateConnectionStatus(false);
+        }
+    }
+    
+    updateConnectionStatus(connected, gamepadId = null) {
+        const statusEl = document.getElementById('joystick-status');
+        const textEl = document.getElementById('joystick-status-text');
+        
+        if (statusEl && textEl) {
+            if (connected) {
+                statusEl.classList.add('connected');
+                statusEl.classList.remove('disconnected');
+                // Truncate long gamepad names
+                const displayName = gamepadId && gamepadId.length > 30 
+                    ? gamepadId.substring(0, 27) + '...' 
+                    : gamepadId || 'Controller';
+                textEl.textContent = `✓ ${displayName}`;
+            } else {
+                statusEl.classList.remove('connected');
+                statusEl.classList.add('disconnected');
+                textEl.textContent = 'Press any button on controller...';
+            }
+        }
+    }
+    
+    startScanning() {
+        // Continuously scan for gamepads (needed because browsers require button press)
+        if (this.scanInterval) return;
+        
+        this.scanInterval = setInterval(() => {
+            if (this.gamepadIndex === null) {
+                this.checkExistingGamepads();
+            }
+        }, 500); // Check every 500ms
+    }
+    
+    stopScanning() {
+        if (this.scanInterval) {
+            clearInterval(this.scanInterval);
+            this.scanInterval = null;
+        }
+    }
+    
+    bindEvents() {
+        // Start polling for gamepad input
+        this.startPolling();
+        
+        // Check for already-connected gamepads
+        this.checkExistingGamepads();
+    }
+    
+    unbindEvents() {
+        this.stopPolling();
+    }
+    
+    checkExistingGamepads() {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        
+        for (const gp of gamepads) {
+            if (gp && gp.connected) {
+                // Accept any connected gamepad - browser security already handled via event
+                this.gamepad = gp;
+                this.gamepadIndex = gp.index;
+                this.updateConnectionStatus(true, gp.id);
+                console.log('🎮 GamepadInput connected to:', gp.id, 'index:', gp.index);
+                this.stopScanning(); // Stop scanning once connected
+                return; // Found one, exit
+            }
+        }
+    }
+    
+    startPolling() {
+        if (this.pollInterval) return;
+        
+        this.pollInterval = setInterval(() => {
+            this.pollGamepad();
+        }, this.config.pollRate);
+    }
+    
+    stopPolling() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
+        
+        // Send stop event when disabling
+        if (this.isMoving) {
+            this.isMoving = false;
+            this.emit('input', {
+                type: 'movement',
+                direction: 'stop',
+                intensity: 0
+            });
+        }
+    }
+    
+    pollGamepad() {
+        // Re-fetch gamepad state (required in some browsers)
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        const gp = this.gamepadIndex !== null ? gamepads[this.gamepadIndex] : null;
+        
+        if (!gp) {
+            // Try to find any connected gamepad if we don't have one
+            if (this.gamepadIndex === null) {
+                for (const pad of gamepads) {
+                    if (pad && pad.connected) {
+                        this.gamepad = pad;
+                        this.gamepadIndex = pad.index;
+                        this.updateConnectionStatus(true, pad.id);
+                        console.log('🎮 pollGamepad found gamepad:', pad.id);
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+        
+        // Skip if not enabled (but still allow detection above)
+        if (!this.enabled) {
+            // Debug: log occasionally that we're disabled
+            if (!this._lastDisabledLog || Date.now() - this._lastDisabledLog > 5000) {
+                console.log('🎮 pollGamepad: skipping because not enabled');
+                this._lastDisabledLog = Date.now();
+            }
+            return;
+        }
+        
+        // Read left stick axes (standard mapping)
+        const rawX = gp.axes[0] || 0; // Left stick horizontal
+        const rawY = gp.axes[1] || 0; // Left stick vertical
+        
+        // Debug: log raw input when significant
+        if (Math.abs(rawX) > 0.1 || Math.abs(rawY) > 0.1) {
+            if (!this._lastInputLog || Date.now() - this._lastInputLog > 500) {
+                console.log('🎮 Joystick raw input:', rawX.toFixed(2), rawY.toFixed(2));
+                this._lastInputLog = Date.now();
+            }
+        }
+        
+        // Apply deadzone
+        const { x, y } = this.applyDeadzone(rawX, rawY);
+        
+        // Calculate magnitude (0-1)
+        const magnitude = Math.min(1, Math.sqrt(x * x + y * y));
+        
+        // Apply sensitivity curve
+        const curve = this.sensitivityCurves[this.config.sensitivity] || this.sensitivityCurves.medium;
+        const adjustedMagnitude = magnitude > 0 ? curve(magnitude) : 0;
+        
+        // Determine if we're moving
+        const wasMoving = this.isMoving;
+        this.isMoving = adjustedMagnitude > 0;
+        
+        if (this.isMoving) {
+            // Calculate direction angle
+            const angle = Math.atan2(y, x);
+            
+            // Normalize direction vector
+            const dirX = magnitude > 0 ? x / magnitude : 0;
+            const dirY = magnitude > 0 ? y / magnitude : 0;
+            
+            // Emit movement event with analog data
+            this.emit('input', {
+                type: 'movement',
+                direction: this.getCardinalDirection(angle),
+                directionVector: { x: dirX, y: dirY },
+                intensity: adjustedMagnitude,
+                angle: angle,
+                raw: { x: rawX, y: rawY }
+            });
+            
+            this.lastDirection = { x: dirX, y: dirY };
+            
+        } else if (wasMoving && !this.isMoving) {
+            // Just stopped moving
+            this.emit('input', {
+                type: 'movement',
+                direction: 'stop',
+                intensity: 0
+            });
+        }
+        
+        // Check buttons (A/X for confirm, B/Circle for pause, Start for menu)
+        this.checkButtons(gp);
+    }
+    
+    applyDeadzone(x, y) {
+        const magnitude = Math.sqrt(x * x + y * y);
+        const deadzone = this.config.deadzone;
+        
+        if (magnitude < deadzone) {
+            return { x: 0, y: 0 };
+        }
+        
+        // Scale the output so it starts from 0 after the deadzone
+        const scaledMagnitude = (magnitude - deadzone) / (1 - deadzone);
+        const scale = scaledMagnitude / magnitude;
+        
+        return {
+            x: x * scale,
+            y: y * scale
+        };
+    }
+    
+    getCardinalDirection(angle) {
+        // Convert angle to cardinal direction for compatibility
+        // angle is in radians, 0 = right, π/2 = down, π = left, -π/2 = up
+        const deg = angle * (180 / Math.PI);
+        
+        if (deg >= -45 && deg < 45) return 'right';
+        if (deg >= 45 && deg < 135) return 'down';
+        if (deg >= 135 || deg < -135) return 'left';
+        return 'up';
+    }
+    
+    checkButtons(gp) {
+        // Standard gamepad button mapping
+        // 0 = A/Cross, 1 = B/Circle, 2 = X/Square, 3 = Y/Triangle
+        // 8 = Select/Back, 9 = Start
+        
+        // Check for button presses (rising edge detection would be better but this is simpler)
+        if (gp.buttons[0] && gp.buttons[0].pressed) {
+            // A button - confirm/select
+            if (!this._buttonStates) this._buttonStates = {};
+            if (!this._buttonStates[0]) {
+                this._buttonStates[0] = true;
+                this.emit('input', {
+                    type: 'action',
+                    action: 'confirm'
+                });
+            }
+        } else if (this._buttonStates && this._buttonStates[0]) {
+            this._buttonStates[0] = false;
+        }
+        
+        if (gp.buttons[1] && gp.buttons[1].pressed) {
+            // B button - pause
+            if (!this._buttonStates) this._buttonStates = {};
+            if (!this._buttonStates[1]) {
+                this._buttonStates[1] = true;
+                this.emit('input', {
+                    type: 'action',
+                    action: 'pause'
+                });
+            }
+        } else if (this._buttonStates && this._buttonStates[1]) {
+            this._buttonStates[1] = false;
+        }
+        
+        if (gp.buttons[9] && gp.buttons[9].pressed) {
+            // Start button - menu
+            if (!this._buttonStates) this._buttonStates = {};
+            if (!this._buttonStates[9]) {
+                this._buttonStates[9] = true;
+                this.emit('input', {
+                    type: 'interface',
+                    command: 'menu'
+                });
+            }
+        } else if (this._buttonStates && this._buttonStates[9]) {
+            this._buttonStates[9] = false;
+        }
+    }
+    
+    updateConfig(newConfig) {
+        super.updateConfig(newConfig);
+        
+        // Convert percentage deadzone to decimal
+        if (newConfig.deadzone !== undefined) {
+            this.config.deadzone = newConfig.deadzone / 100;
+        }
+        if (newConfig.sensitivity !== undefined) {
+            this.config.sensitivity = newConfig.sensitivity;
+        }
+    }
+    
+    isConnected() {
+        return this.gamepad !== null;
+    }
+}
+
+/**
  * Game Event Class
  */
 class GameEvent {
@@ -845,6 +1254,62 @@ if (typeof module !== 'undefined' && module.exports) {
         KeyboardInput,
         SwitchInput,
         EyeGazeInput,
-        TouchInput
+        TouchInput,
+        GamepadInput
     };
 }
+
+// Also export to window for browser usage
+window.UniversalInputManager = UniversalInputManager;
+window.GameEvent = GameEvent;
+window.KeyboardInput = KeyboardInput;
+window.SwitchInput = SwitchInput;
+window.EyeGazeInput = EyeGazeInput;
+window.TouchInput = TouchInput;
+window.GamepadInput = GamepadInput;
+
+console.log('🎮 Input manager classes exported to window');
+
+// Early gamepad detection - register listeners immediately at script load
+// Store detected gamepads so GamepadInput can find them later
+window._detectedGamepads = window._detectedGamepads || [];
+
+(function() {
+    console.log('🎮 Registering early gamepad listeners...');
+    
+    window.addEventListener('gamepadconnected', (e) => {
+        console.log('🎮 [EARLY] Gamepad connected event:', e.gamepad.id, 'index:', e.gamepad.index);
+        window._detectedGamepads.push(e.gamepad.index);
+        
+        // If GamepadInput already exists, notify it
+        if (window._gamepadInputInstance) {
+            console.log('🎮 [EARLY] Notifying GamepadInput instance of connection');
+            window._gamepadInputInstance.onGamepadConnected(e);
+        } else {
+            console.log('🎮 [EARLY] GamepadInput instance not yet created, will check later');
+        }
+    });
+    
+    window.addEventListener('gamepaddisconnected', (e) => {
+        console.log('🎮 [EARLY] Gamepad disconnected event:', e.gamepad.id);
+        window._detectedGamepads = window._detectedGamepads.filter(i => i !== e.gamepad.index);
+        
+        // If GamepadInput already exists, notify it
+        if (window._gamepadInputInstance) {
+            window._gamepadInputInstance.onGamepadDisconnected(e);
+        }
+    });
+    
+    // Also do an immediate check
+    if (navigator.getGamepads) {
+        const gamepads = navigator.getGamepads();
+        const connected = Array.from(gamepads).filter(g => g !== null);
+        console.log('🎮 [EARLY] Initial gamepad check:', connected.length, 'gamepads found');
+        connected.forEach(gp => {
+            console.log('🎮 [EARLY] Found:', gp.id, 'buttons:', gp.buttons.length, 'axes:', gp.axes.length);
+            window._detectedGamepads.push(gp.index);
+        });
+    } else {
+        console.warn('🎮 [EARLY] navigator.getGamepads not available!');
+    }
+})();
