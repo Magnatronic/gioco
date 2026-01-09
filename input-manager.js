@@ -918,6 +918,29 @@ class GamepadInput extends BaseInput {
     
     onGamepadConnected(event) {
         console.log('🎮 Gamepad connected:', event.gamepad.id);
+        
+        const id = event.gamepad.id.toLowerCase();
+        const isVirtual = id.includes('vjoy') || id.includes('virtual');
+        
+        // If we already have a real controller connected, don't switch to a virtual one
+        if (this.gamepad && isVirtual) {
+            const currentId = this.gamepad.id.toLowerCase();
+            const currentIsVirtual = currentId.includes('vjoy') || currentId.includes('virtual');
+            if (!currentIsVirtual) {
+                console.log('🎮 Ignoring virtual joystick, already have real controller:', this.gamepad.id);
+                return;
+            }
+        }
+        
+        // If this is a real controller and we're currently using a virtual one, switch
+        if (this.gamepad && !isVirtual) {
+            const currentId = this.gamepad.id.toLowerCase();
+            const currentIsVirtual = currentId.includes('vjoy') || currentId.includes('virtual');
+            if (currentIsVirtual) {
+                console.log('🎮 Switching from virtual to real controller:', event.gamepad.id);
+            }
+        }
+        
         this.gamepad = event.gamepad;
         this.gamepadIndex = event.gamepad.index;
         
@@ -1003,15 +1026,34 @@ class GamepadInput extends BaseInput {
     checkExistingGamepads() {
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
         
+        // First pass: look for real/physical controllers (prefer XInput, avoid virtual)
         for (const gp of gamepads) {
             if (gp && gp.connected) {
-                // Accept any connected gamepad - browser security already handled via event
+                const id = gp.id.toLowerCase();
+                // Skip virtual joysticks (vJoy, etc.)
+                if (id.includes('vjoy') || id.includes('virtual')) {
+                    console.log('🎮 Skipping virtual joystick:', gp.id);
+                    continue;
+                }
+                // Found a real controller
                 this.gamepad = gp;
                 this.gamepadIndex = gp.index;
                 this.updateConnectionStatus(true, gp.id);
                 console.log('🎮 GamepadInput connected to:', gp.id, 'index:', gp.index);
-                this.stopScanning(); // Stop scanning once connected
-                return; // Found one, exit
+                this.stopScanning();
+                return;
+            }
+        }
+        
+        // Second pass: if no real controller found, accept any connected gamepad
+        for (const gp of gamepads) {
+            if (gp && gp.connected) {
+                this.gamepad = gp;
+                this.gamepadIndex = gp.index;
+                this.updateConnectionStatus(true, gp.id);
+                console.log('🎮 GamepadInput connected to (fallback):', gp.id, 'index:', gp.index);
+                this.stopScanning();
+                return;
             }
         }
     }
